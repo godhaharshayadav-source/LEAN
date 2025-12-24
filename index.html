@@ -10,6 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
@@ -28,7 +30,9 @@
             border: 1px solid #e2e8f0; 
             border-radius: 0.5rem; 
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s;
         }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
         
         /* VSM Box Styling */
         .vsm-process {
@@ -90,22 +94,34 @@
             animation: pulse-red 2s infinite;
         }
 
-        /* Sticky Note Styling for Kaizen Board */
+        /* Heartbeat Animation for OEE */
+        @keyframes heartbeat {
+            0% { transform: scale(1); }
+            15% { transform: scale(1.3); }
+            30% { transform: scale(1); }
+            45% { transform: scale(1.15); }
+            60% { transform: scale(1); }
+        }
+        .animate-heartbeat {
+            animation: heartbeat 2s infinite;
+            display: inline-block;
+        }
+
+        /* Sticky Note Styling */
         .sticky-note {
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .sticky-note:hover {
-            transform: scale(1.02);
+            transform: scale(1.05) rotate(1deg);
             z-index: 10;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
         }
-        /* Fade in animation */
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translateY(10px) scale(0.9); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .animate-fade-in {
-            animation: fadeIn 0.3s ease-out forwards;
+            animation: fadeIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
         }
 
         /* Toast Notification */
@@ -120,93 +136,132 @@
             border-left: 4px solid #22c55e;
             padding: 1rem;
             border-radius: 4px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
             display: flex;
             align-items: center;
             gap: 12px;
             min-width: 300px;
-            transform: translateX(100%);
-            transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+            transform: translateX(120%);
+            transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55);
         }
         .toast.show {
             transform: translateX(0);
         }
+
+        /* Panic Button */
+        .panic-btn {
+            background: radial-gradient(circle at 30% 30%, #ef4444, #991b1b);
+            box-shadow: 0 10px 0 #7f1d1d, 0 10px 20px rgba(0,0,0,0.4);
+            transition: all 0.1s;
+        }
+        .panic-btn:active {
+            transform: translateY(5px);
+            box-shadow: 0 5px 0 #7f1d1d, 0 5px 10px rgba(0,0,0,0.4);
+        }
+        .panic-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(220, 38, 38, 0.3);
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            animation: flash 0.5s infinite;
+            pointer-events: none;
+        }
+        @keyframes flash {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
     </style>
 </head>
-<body class="flex h-screen overflow-hidden">
+<body class="flex h-screen overflow-hidden bg-slate-50">
 
     <!-- Toast Container -->
     <div id="toast-container"></div>
+    
+    <!-- Panic Overlay -->
+    <div id="panic-overlay" class="panic-overlay">
+        <div class="bg-red-600 text-white px-10 py-6 rounded-xl shadow-2xl border-4 border-white text-4xl font-black transform rotate-2">
+            ⚠️ LINE STOPPED! HELP NEEDED! ⚠️
+        </div>
+    </div>
 
     <!-- Sidebar -->
-    <aside class="w-64 bg-slate-900 text-slate-400 flex flex-col flex-shrink-0 z-20 shadow-xl">
+    <aside class="w-64 bg-slate-900 text-slate-400 flex flex-col flex-shrink-0 z-20 shadow-2xl">
         <div class="p-6 border-b border-slate-800 flex items-center gap-3">
-            <div class="w-10 h-10 bg-rose-600 rounded flex items-center justify-center text-white font-bold text-lg">A</div>
+            <div class="w-10 h-10 bg-rose-600 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-lg shadow-rose-900/50">A</div>
             <div>
-                <h1 class="text-white font-bold leading-tight">ACME<br>Stamping</h1>
+                <h1 class="text-white font-bold leading-tight tracking-tight">ACME<br>Stamping</h1>
             </div>
         </div>
 
-        <nav class="flex-1 overflow-y-auto py-6 space-y-1">
-            <button onclick="switchTab('define')" id="btn-define" class="nav-item w-full flex items-center gap-3 px-6 py-3 text-left active">
+        <nav class="flex-1 overflow-y-auto py-6 space-y-2 px-2">
+            <button onclick="switchTab('define')" id="btn-define" class="nav-item w-full flex items-center gap-3 px-4 py-3 text-left active rounded-lg">
                 <i class="ph ph-target text-xl"></i>
                 <span class="font-medium text-sm">1. Define & Quantify</span>
             </button>
-            <button onclick="switchTab('map')" id="btn-map" class="nav-item w-full flex items-center gap-3 px-6 py-3 text-left">
+            <button onclick="switchTab('map')" id="btn-map" class="nav-item w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg">
                 <i class="ph ph-tree-structure text-xl"></i>
                 <span class="font-medium text-sm">2. Value Stream Map</span>
             </button>
-            <button onclick="switchTab('countermeasures')" id="btn-countermeasures" class="nav-item w-full flex items-center gap-3 px-6 py-3 text-left">
+            <button onclick="switchTab('countermeasures')" id="btn-countermeasures" class="nav-item w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg">
                 <i class="ph ph-wrench text-xl"></i>
                 <span class="font-medium text-sm">3. Solution Simulator</span>
             </button>
-            <button onclick="switchTab('control')" id="btn-control" class="nav-item w-full flex items-center gap-3 px-6 py-3 text-left">
+            <button onclick="switchTab('control')" id="btn-control" class="nav-item w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg">
                 <i class="ph ph-chart-line-up text-xl"></i>
                 <span class="font-medium text-sm">4. Shop Floor Control</span>
             </button>
-            <button onclick="switchTab('gemba')" id="btn-gemba" class="nav-item w-full flex items-center gap-3 px-6 py-3 text-left">
+            <button onclick="switchTab('gemba')" id="btn-gemba" class="nav-item w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg">
                 <i class="ph ph-binoculars text-xl"></i>
                 <span class="font-medium text-sm">5. Gemba & Kaizen</span>
             </button>
         </nav>
 
-        <div class="p-4 bg-slate-800">
+        <div class="p-4 bg-slate-800 mx-2 mb-2 rounded-xl border border-slate-700">
             <div class="flex items-center gap-3 mb-3">
-                <img src="https://ui-avatars.com/api/?name=John+Doe&background=334155&color=fff" class="w-8 h-8 rounded-full">
+                <div class="relative">
+                    <img src="https://ui-avatars.com/api/?name=John+Doe&background=334155&color=fff" class="w-10 h-10 rounded-full border-2 border-slate-600">
+                    <span class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-slate-800"></span>
+                </div>
                 <div>
                     <p class="text-xs text-white font-bold">J. Smith</p>
                     <p class="text-[10px] text-slate-400">Plant Manager</p>
                 </div>
             </div>
-            <div class="flex justify-between text-[10px] text-slate-400 border-t border-slate-700 pt-2">
+            <div class="flex justify-between text-[10px] text-slate-400 border-t border-slate-700 pt-2 mt-2">
                 <span>Shift: A</span>
                 <span>Line: 4</span>
-                <span class="text-green-400">● Online</span>
+                <span class="text-green-400 font-bold animate-pulse">● Online</span>
             </div>
         </div>
     </aside>
 
     <!-- Main Content -->
-    <main class="flex-1 overflow-y-auto relative">
+    <main class="flex-1 overflow-y-auto relative bg-slate-50">
         <!-- Top Bar -->
-        <header class="bg-white border-b border-slate-200 sticky top-0 z-10 px-8 py-4 flex justify-between items-center shadow-sm">
+        <header class="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 py-4 flex justify-between items-center shadow-sm">
             <div>
                 <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2" id="page-title">Define the Problem</h2>
                 <div class="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                    <span class="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">Project: SMED-2025</span>
+                    <span class="bg-rose-50 text-rose-700 px-2 py-0.5 rounded border border-rose-100 font-bold">SMED-2025</span>
                     <i class="ph ph-caret-right"></i>
                     <span id="page-subtitle">Problem Statement</span>
                 </div>
             </div>
-            <div class="flex gap-3">
-                <div class="text-right mr-4 border-r border-slate-200 pr-4 hidden md:block">
-                    <p class="text-[10px] text-slate-400 uppercase font-bold">Current OEE</p>
-                    <p class="text-lg font-bold text-slate-700">85% <span class="text-green-500 text-xs">▲ 2%</span></p>
+            <div class="flex gap-4 items-center">
+                <div class="text-right border-r border-slate-200 pr-4 hidden md:block">
+                    <p class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Current OEE</p>
+                    <div class="flex items-center gap-1 justify-end">
+                        <i class="ph ph-heartbeat text-rose-500 animate-heartbeat text-lg"></i>
+                        <p class="text-xl font-black text-slate-800">85%</p>
+                    </div>
                 </div>
-                <button onclick="showToast('PDF Export started...')" class="bg-white border border-slate-300 text-slate-700 px-3 py-2 rounded shadow-sm hover:bg-slate-50 text-sm font-medium flex items-center gap-2">
-                    <i class="ph ph-download-simple"></i> Export
+                <button onclick="showToast('PDF Export started...')" class="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 hover:shadow-md transition-all text-sm font-bold flex items-center gap-2 group">
+                    <i class="ph ph-download-simple group-hover:scale-110 transition-transform"></i> Export
                 </button>
-                <button class="bg-rose-600 text-white px-3 py-2 rounded shadow hover:bg-rose-700 text-sm font-medium flex items-center gap-2">
+                <button class="bg-rose-600 text-white px-4 py-2 rounded-lg shadow-lg shadow-rose-200 hover:bg-rose-700 hover:shadow-rose-300 hover:-translate-y-0.5 transition-all text-sm font-bold flex items-center gap-2">
                     <i class="ph ph-share-network"></i> Share
                 </button>
             </div>
@@ -215,73 +270,89 @@
         <div class="p-8 max-w-7xl mx-auto">
             
             <!-- VIEW 1: DEFINE -->
-            <div id="view-define" class="view-section block animate-fade">
+            <div id="view-define" class="view-section block animate-fade-in">
                 <div class="grid grid-cols-12 gap-6">
                     <!-- Problem Card -->
-                    <div class="col-span-12 lg:col-span-8 card p-6 border-l-4 border-l-rose-500">
-                        <div class="flex justify-between items-start mb-4">
-                            <h3 class="font-bold text-lg text-slate-800">Problem Statement</h3>
-                            <span class="bg-red-50 text-red-600 px-2 py-1 rounded text-xs font-bold border border-red-100">CRITICAL</span>
+                    <div class="col-span-12 lg:col-span-8 card p-8 border-l-8 border-l-rose-500 relative overflow-hidden group">
+                        <div class="absolute -right-10 -top-10 text-rose-50 opacity-20 group-hover:opacity-30 transition-opacity transform rotate-12">
+                            <i class="ph ph-warning-octagon text-[150px]"></i>
                         </div>
-                        <p class="text-slate-600 text-sm leading-relaxed mb-4">
-                            Stamping changeovers currently take <strong>60 minutes</strong> (Internal), forcing large batch sizes and high inventory buffers (4,600 units). This rigidity prevents ACME from meeting State Street Assembly's mixed-model daily demand without overtime or expedited freight.
+                        <div class="flex justify-between items-start mb-6 relative z-10">
+                            <h3 class="font-bold text-2xl text-slate-800">Problem Statement</h3>
+                            <span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-black border border-red-200 animate-pulse">CRITICAL</span>
+                        </div>
+                        <p class="text-slate-600 text-base leading-relaxed mb-6 relative z-10">
+                            ACME Stamping is experiencing excessive changeover times (60 min for Stamping, 10 min for Welding). This forces large batch production, resulting in high WIP and a <strong class="text-rose-600 bg-rose-50 px-1 rounded">lead time of 8-10 days</strong>, failing to meet the customer's need for flexibility and daily shipments.
                         </p>
-                        <div class="grid grid-cols-3 gap-4 mt-6">
-                            <div class="bg-slate-50 p-3 rounded border border-slate-200">
-                                <span class="text-[10px] text-slate-500 uppercase font-bold">Setup Time</span>
-                                <div class="text-2xl font-bold text-slate-800">60 <span class="text-sm font-normal text-slate-500">min</span></div>
+                        <div class="grid grid-cols-3 gap-6 mt-4 relative z-10">
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center hover:bg-white hover:shadow-lg transition-all cursor-default">
+                                <span class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Setup Time</span>
+                                <div class="text-3xl font-black text-slate-800 mt-1">60 <span class="text-sm font-bold text-slate-400">min</span></div>
                             </div>
-                            <div class="bg-slate-50 p-3 rounded border border-slate-200">
-                                <span class="text-[10px] text-slate-500 uppercase font-bold">WIP Buffer</span>
-                                <div class="text-2xl font-bold text-slate-800">4.6k <span class="text-sm font-normal text-slate-500">units</span></div>
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center hover:bg-white hover:shadow-lg transition-all cursor-default">
+                                <span class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Lead Time</span>
+                                <div class="text-3xl font-black text-rose-600 mt-1">9 <span class="text-sm font-bold text-rose-400">days</span></div>
                             </div>
-                            <div class="bg-slate-50 p-3 rounded border border-slate-200">
-                                <span class="text-[10px] text-slate-500 uppercase font-bold">Cust. Demand</span>
-                                <div class="text-2xl font-bold text-slate-800">18.4k <span class="text-sm font-normal text-slate-500">/mo</span></div>
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center hover:bg-white hover:shadow-lg transition-all cursor-default">
+                                <span class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Cust. Demand</span>
+                                <div class="text-3xl font-black text-slate-800 mt-1">18.4k <span class="text-sm font-bold text-slate-400">/mo</span></div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Customer Context -->
-                    <div class="col-span-12 lg:col-span-4 card p-6">
-                        <h3 class="font-bold text-sm text-slate-800 mb-4 uppercase tracking-wide">Customer Voice</h3>
-                        <div class="flex items-center gap-4 mb-4">
-                            <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
-                                <i class="ph ph-buildings text-2xl"></i>
-                            </div>
-                            <div>
-                                <p class="font-bold text-slate-800">State Street Assembly</p>
-                                <p class="text-xs text-slate-500">Just-in-Time (JIT) Plant</p>
+                    <div class="col-span-12 lg:col-span-4 card p-8 flex flex-col justify-between">
+                        <div>
+                            <h3 class="font-bold text-sm text-slate-400 mb-6 uppercase tracking-widest">Customer Voice</h3>
+                            <div class="flex items-center gap-4 mb-6">
+                                <div class="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 shadow-sm">
+                                    <i class="ph ph-buildings text-4xl"></i>
+                                </div>
+                                <div>
+                                    <p class="font-black text-xl text-slate-800">State Street</p>
+                                    <p class="text-xs text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded inline-block mt-1">JIT Plant</p>
+                                </div>
                             </div>
                         </div>
-                        <div class="space-y-3">
-                            <div class="flex justify-between text-sm">
-                                <span class="text-slate-500">Takt Time Requirement</span>
-                                <span class="font-bold text-slate-700">~60 sec</span>
+                        <div class="space-y-4">
+                            <div class="flex justify-between text-sm items-center">
+                                <span class="text-slate-500 font-medium">Takt Time Req.</span>
+                                <span class="font-bold text-slate-800 bg-slate-100 px-2 py-1 rounded">~60 sec</span>
                             </div>
-                            <div class="flex justify-between text-sm">
-                                <span class="text-slate-500">Delivery Frequency</span>
-                                <span class="font-bold text-slate-700">Daily</span>
+                            <div class="flex justify-between text-sm items-center">
+                                <span class="text-slate-500 font-medium">Delivery Freq.</span>
+                                <span class="font-bold text-slate-800 bg-slate-100 px-2 py-1 rounded">Daily</span>
                             </div>
-                            <div class="w-full bg-slate-100 h-1 mt-2">
-                                <div class="bg-blue-500 h-1" style="width: 80%"></div>
+                            <div class="pt-4 border-t border-slate-100">
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="font-bold text-slate-400">Satisfaction Score</span>
+                                    <span class="font-bold text-orange-500">80% (Risk)</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-orange-500 h-full rounded-full" style="width: 80%"></div>
+                                </div>
                             </div>
-                            <p class="text-[10px] text-right text-slate-400">Satisfaction Score: 80%</p>
                         </div>
                     </div>
 
-                    <!-- Pareto Chart (Horizontal for better readability) -->
+                    <!-- Pareto Chart -->
                     <div class="col-span-12 lg:col-span-6 card p-6">
-                        <h4 class="font-bold text-sm text-slate-700 mb-4">Loss Analysis (Pareto)</h4>
-                        <div class="h-48">
+                        <div class="flex justify-between items-center mb-4">
+                            <h4 class="font-bold text-slate-700">Loss Analysis (Pareto)</h4>
+                            <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded font-bold">Hours/Month</span>
+                        </div>
+                        <div class="h-56">
                             <canvas id="lossChart"></canvas>
                         </div>
                     </div>
 
-                    <!-- Time Composition Chart (New) -->
+                    <!-- Time Composition Chart -->
                     <div class="col-span-12 lg:col-span-6 card p-6">
-                        <h4 class="font-bold text-sm text-slate-700 mb-4">Total Available Time Composition</h4>
-                        <div class="h-48">
+                        <div class="flex justify-between items-center mb-4">
+                            <h4 class="font-bold text-slate-700">Total Time Composition</h4>
+                            <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded font-bold">Value Added Ratio</span>
+                        </div>
+                        <div class="h-56">
                             <canvas id="compositionChart"></canvas>
                         </div>
                     </div>
@@ -289,82 +360,86 @@
             </div>
 
             <!-- VIEW 2: MAP (Interactive VSM) -->
-            <div id="view-map" class="view-section hidden">
-                <div class="card p-6 min-h-[500px]">
-                    <div class="flex justify-between items-center mb-8 border-b border-slate-100 pb-4">
+            <div id="view-map" class="view-section hidden animate-fade-in">
+                <div class="card p-8 min-h-[600px] relative overflow-hidden">
+                    <div class="flex justify-between items-center mb-10 border-b border-slate-100 pb-6">
                         <div>
-                            <h3 class="font-bold text-lg text-slate-800">Value Stream Map</h3>
-                            <p class="text-xs text-slate-500">Stamping &rarr; Weld &rarr; Ship</p>
+                            <h3 class="font-black text-2xl text-slate-800">Value Stream Map</h3>
+                            <p class="text-sm text-slate-500 mt-1 flex items-center gap-1"><i class="ph ph-arrow-elbow-down-right"></i> Stamping &rarr; Weld &rarr; Ship</p>
                         </div>
-                        <div class="flex items-center gap-3 bg-slate-50 p-1 rounded-lg border border-slate-200">
-                            <button onclick="toggleVSM('current')" id="vsm-btn-current" class="px-4 py-1.5 rounded text-xs font-bold bg-white shadow text-slate-800 transition-all">Current State</button>
-                            <button onclick="toggleVSM('future')" id="vsm-btn-future" class="px-4 py-1.5 rounded text-xs font-medium text-slate-500 hover:text-slate-700 transition-all">Future State</button>
+                        <div class="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                            <button onclick="toggleVSM('current')" id="vsm-btn-current" class="px-6 py-2 rounded-lg text-sm font-bold bg-white shadow-md text-slate-800 transition-all hover:scale-105">Current State</button>
+                            <button onclick="toggleVSM('future')" id="vsm-btn-future" class="px-6 py-2 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-all hover:bg-white/50">Future State</button>
                         </div>
                     </div>
 
                     <!-- VSM Diagram -->
-                    <div class="flex items-start justify-center overflow-x-auto py-6" id="vsm-container">
+                    <div class="flex items-start justify-center overflow-x-auto py-8 px-4" id="vsm-container">
                         <!-- Supplier -->
-                        <div class="flex flex-col items-center mx-4">
-                            <div class="w-20 h-12 bg-slate-800 text-white flex items-center justify-center rounded-lg text-xs font-bold mb-2 shadow-lg">Michigan<br>Steel</div>
-                            <i class="ph ph-truck text-2xl text-slate-400"></i>
-                            <span class="text-[10px] text-slate-400">2x / Week</span>
+                        <div class="flex flex-col items-center mx-6 group">
+                            <div class="w-24 h-16 bg-slate-800 text-white flex items-center justify-center rounded-xl text-xs font-black mb-3 shadow-xl group-hover:-translate-y-1 transition-transform cursor-pointer border-2 border-slate-600">Michigan<br>Steel</div>
+                            <i class="ph ph-truck text-3xl text-slate-400 group-hover:text-slate-600 transition-colors"></i>
+                            <span class="text-[10px] text-slate-400 font-bold mt-1 bg-slate-100 px-2 py-0.5 rounded">2x / Week</span>
                         </div>
 
-                        <div class="vsm-arrow mt-6"></div>
+                        <div class="vsm-arrow mt-8 w-20"></div>
 
                         <!-- Process 1: Stamping -->
-                        <div class="flex flex-col gap-2">
-                            <div class="vsm-process shadow-sm">
-                                <div class="font-bold text-sm">Stamping</div>
-                                <div class="text-[10px] text-slate-500">1 Press</div>
-                                <i class="ph ph-wrench absolute top-1 right-1 text-slate-300 text-xs"></i>
+                        <div class="flex flex-col gap-3 relative">
+                            <div class="vsm-process shadow-lg rounded-lg group hover:border-blue-400 transition-colors">
+                                <div class="font-bold text-sm text-slate-800">Stamping</div>
+                                <div class="text-[10px] text-slate-500 font-medium">1 Press</div>
+                                <div class="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full shadow border border-slate-100 flex items-center justify-center">
+                                    <i class="ph ph-wrench text-slate-400 text-sm group-hover:text-blue-500 group-hover:rotate-45 transition-all"></i>
+                                </div>
                             </div>
-                            <div class="vsm-data-box" id="data-stamping">
-                                <div class="flex justify-between"><span>C/T:</span> <b>1 sec</b></div>
+                            <div class="vsm-data-box rounded shadow-sm">
+                                <div class="flex justify-between border-b border-slate-200 pb-1 mb-1"><span>C/T:</span> <b class="font-mono">1 sec</b></div>
                                 <div class="flex justify-between text-red-600 font-bold bg-red-50 px-1 rounded transition-colors" id="val-stamping-co"><span>C/O:</span> <b>60 min</b></div>
-                                <div class="flex justify-between transition-colors" id="val-stamping-avail"><span>Avail:</span> <b>85%</b></div>
+                                <div class="flex justify-between transition-colors pt-1" id="val-stamping-avail"><span>Avail:</span> <b class="font-mono">85%</b></div>
                             </div>
                         </div>
 
-                        <!-- Inventory -->
-                        <div class="flex flex-col items-center justify-center px-4 mt-6">
-                            <i class="ph ph-warning-triangle text-yellow-500 text-3xl animate-bounce"></i>
-                            <span class="text-xs font-bold text-red-600 mt-1" id="val-inventory">4,600</span>
-                            <span class="text-[10px] text-slate-400">WIP</span>
+                        <!-- Inventory Triangle -->
+                        <div class="flex flex-col items-center justify-center px-8 mt-8 group cursor-pointer" onclick="showToast('Inventory Waste Identified!', 'error')">
+                            <i class="ph ph-warning-triangle text-yellow-500 text-4xl animate-bounce drop-shadow-md group-hover:scale-125 transition-transform"></i>
+                            <span class="text-xs font-black text-red-600 mt-2 bg-red-50 px-2 py-1 rounded border border-red-100" id="val-inventory">Huge WIP</span>
+                            <span class="text-[10px] text-slate-400 font-bold mt-1">Buffers</span>
                         </div>
 
                         <!-- Process 2: Welding -->
-                        <div class="flex flex-col gap-2">
-                            <div class="vsm-process shadow-sm">
-                                <div class="font-bold text-sm">Spot Weld</div>
-                                <div class="text-[10px] text-slate-500">2 Cells</div>
+                        <div class="flex flex-col gap-3">
+                            <div class="vsm-process shadow-lg rounded-lg group hover:border-orange-400 transition-colors">
+                                <div class="font-bold text-sm text-slate-800">Spot Weld</div>
+                                <div class="text-[10px] text-slate-500 font-medium">2 Cells</div>
                             </div>
-                            <div class="vsm-data-box">
-                                <div class="flex justify-between"><span>C/T:</span> <b>40 sec</b></div>
+                            <div class="vsm-data-box rounded shadow-sm">
+                                <div class="flex justify-between border-b border-slate-200 pb-1 mb-1"><span>C/T:</span> <b class="font-mono">40 sec</b></div>
                                 <div class="flex justify-between text-orange-600 font-bold" id="val-weld-co"><span>C/O:</span> <b>10 min</b></div>
-                                <div class="flex justify-between" id="val-weld-rel"><span>Rel:</span> <b>80%</b></div>
+                                <div class="flex justify-between pt-1" id="val-weld-rel"><span>Rel:</span> <b class="font-mono">80%</b></div>
                             </div>
                         </div>
 
-                        <div class="vsm-arrow mt-6"></div>
+                        <div class="vsm-arrow mt-8 w-20"></div>
 
                         <!-- Customer -->
-                        <div class="flex flex-col items-center mx-4">
-                            <div class="w-20 h-12 bg-slate-800 text-white flex items-center justify-center rounded-lg text-xs font-bold mb-2 shadow-lg">State<br>Street</div>
-                            <i class="ph ph-truck text-2xl text-slate-400"></i>
-                            <span class="text-[10px] text-slate-400">Daily</span>
+                        <div class="flex flex-col items-center mx-6 group">
+                            <div class="w-24 h-16 bg-blue-600 text-white flex items-center justify-center rounded-xl text-xs font-black mb-3 shadow-xl shadow-blue-200 group-hover:-translate-y-1 transition-transform cursor-pointer border-2 border-blue-500">State<br>Street</div>
+                            <i class="ph ph-truck text-3xl text-slate-400 group-hover:text-blue-500 transition-colors"></i>
+                            <span class="text-[10px] text-slate-400 font-bold mt-1 bg-slate-100 px-2 py-0.5 rounded">Daily</span>
                         </div>
                     </div>
 
                     <!-- Lead Time Ladder -->
-                    <div class="mt-12 mx-auto max-w-2xl">
-                        <div class="flex text-xs border border-slate-300 rounded overflow-hidden">
-                            <div class="flex-1 bg-red-50 p-2 text-center text-red-700 font-bold border-r border-slate-300 transition-all" id="ladder-lead">
-                                Lead Time: 5 Days
+                    <div class="mt-16 mx-auto max-w-3xl transform hover:scale-105 transition-transform duration-500">
+                        <div class="flex text-xs border-2 border-slate-300 rounded-xl overflow-hidden shadow-sm">
+                            <div class="flex-1 bg-red-50 p-4 text-center text-red-700 font-black border-r-2 border-slate-300 transition-all flex flex-col items-center justify-center gap-1" id="ladder-lead">
+                                <span class="uppercase tracking-widest opacity-50 text-[10px]">Total Lead Time</span>
+                                <span class="text-2xl">9 Days</span>
                             </div>
-                            <div class="flex-1 bg-green-50 p-2 text-center text-green-700 font-bold">
-                                Value Added: 41 Seconds
+                            <div class="flex-1 bg-green-50 p-4 text-center text-green-700 font-black flex flex-col items-center justify-center gap-1">
+                                <span class="uppercase tracking-widest opacity-50 text-[10px]">Value Added Time</span>
+                                <span class="text-2xl">41 Sec</span>
                             </div>
                         </div>
                     </div>
@@ -372,58 +447,60 @@
             </div>
 
             <!-- VIEW 3: COUNTERMEASURES (Simulator) -->
-            <div id="view-countermeasures" class="view-section hidden">
+            <div id="view-countermeasures" class="view-section hidden animate-fade-in">
                 <div class="grid grid-cols-12 gap-6">
                     <!-- Scenario Builder -->
-                    <div class="col-span-12 lg:col-span-7 card p-0 overflow-hidden">
-                        <div class="bg-slate-900 p-4 border-b border-slate-800">
-                            <h3 class="font-bold text-white">SMED Solution Simulator</h3>
-                            <p class="text-xs text-slate-400">Select improvements to model future state capability.</p>
+                    <div class="col-span-12 lg:col-span-7 card p-0 overflow-hidden shadow-xl">
+                        <div class="bg-slate-900 p-6 border-b border-slate-800">
+                            <h3 class="font-black text-xl text-white flex items-center gap-2">
+                                <i class="ph ph-faders text-rose-500"></i> SMED Simulator
+                            </h3>
+                            <p class="text-sm text-slate-400 mt-1">Select improvements to crush setup time.</p>
                         </div>
-                        <div class="p-6 space-y-4">
+                        <div class="p-8 space-y-6">
                             
                             <!-- Toggle 1 -->
-                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:border-rose-200 transition-colors">
-                                <div class="flex gap-4">
-                                    <div class="w-10 h-10 rounded bg-green-100 text-green-600 flex items-center justify-center text-xl"><i class="ph ph-arrows-out-line-horizontal"></i></div>
+                            <div class="flex items-center justify-between p-5 border-2 border-slate-100 rounded-xl hover:border-green-400 hover:bg-green-50/30 transition-all cursor-pointer group">
+                                <div class="flex gap-5 items-center">
+                                    <div class="w-12 h-12 rounded-xl bg-green-100 text-green-600 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform"><i class="ph ph-arrows-out-line-horizontal"></i></div>
                                     <div>
-                                        <h4 class="font-bold text-slate-800 text-sm">Externalize Setup (Pre-stage)</h4>
-                                        <p class="text-xs text-slate-500">Perform 50% of tasks while machine is running.</p>
+                                        <h4 class="font-bold text-slate-800 text-base">Externalize Setup</h4>
+                                        <p class="text-xs text-slate-500 mt-1">Pre-stage dies while running (-30m)</p>
                                     </div>
                                 </div>
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" value="30" class="sr-only peer impact-toggle" onchange="updateSimulation()">
-                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-rose-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                                    <div class="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-green-500"></div>
                                 </label>
                             </div>
 
                             <!-- Toggle 2 -->
-                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:border-rose-200 transition-colors">
-                                <div class="flex gap-4">
-                                    <div class="w-10 h-10 rounded bg-blue-100 text-blue-600 flex items-center justify-center text-xl"><i class="ph ph-wrench"></i></div>
+                            <div class="flex items-center justify-between p-5 border-2 border-slate-100 rounded-xl hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer group">
+                                <div class="flex gap-5 items-center">
+                                    <div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform"><i class="ph ph-wrench"></i></div>
                                     <div>
-                                        <h4 class="font-bold text-slate-800 text-sm">Quick Release Clamps</h4>
-                                        <p class="text-xs text-slate-500">Replace bolts with hand-actuated clamps.</p>
+                                        <h4 class="font-bold text-slate-800 text-base">Quick Release Clamps</h4>
+                                        <p class="text-xs text-slate-500 mt-1">One-touch mechanics (-15m)</p>
                                     </div>
                                 </div>
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" value="15" class="sr-only peer impact-toggle" onchange="updateSimulation()">
-                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-rose-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                                    <div class="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-500"></div>
                                 </label>
                             </div>
 
                             <!-- Toggle 3 -->
-                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:border-rose-200 transition-colors">
-                                <div class="flex gap-4">
-                                    <div class="w-10 h-10 rounded bg-purple-100 text-purple-600 flex items-center justify-center text-xl"><i class="ph ph-list-checks"></i></div>
+                            <div class="flex items-center justify-between p-5 border-2 border-slate-100 rounded-xl hover:border-purple-400 hover:bg-purple-50/30 transition-all cursor-pointer group">
+                                <div class="flex gap-5 items-center">
+                                    <div class="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform"><i class="ph ph-list-checks"></i></div>
                                     <div>
-                                        <h4 class="font-bold text-slate-800 text-sm">5S & Standard Work</h4>
-                                        <p class="text-xs text-slate-500">Color-coded dies, shadow boards, no searching.</p>
+                                        <h4 class="font-bold text-slate-800 text-base">5S & Standard Work</h4>
+                                        <p class="text-xs text-slate-500 mt-1">Zero search time (-5m)</p>
                                     </div>
                                 </div>
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" value="5" class="sr-only peer impact-toggle" onchange="updateSimulation()">
-                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-rose-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                                    <div class="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-500"></div>
                                 </label>
                             </div>
 
@@ -433,32 +510,35 @@
                     <!-- Results Panel -->
                     <div class="col-span-12 lg:col-span-5 flex flex-col gap-6">
                         <!-- Time Gauge -->
-                        <div class="card p-6 flex flex-col items-center justify-center flex-1">
-                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Projected Setup Time</h4>
-                            <div class="relative w-48 h-48 flex items-center justify-center">
-                                <svg class="w-full h-full transform -rotate-90">
-                                    <circle cx="96" cy="96" r="80" stroke="#f1f5f9" stroke-width="12" fill="none" />
-                                    <circle id="sim-circle" cx="96" cy="96" r="80" stroke="#ef4444" stroke-width="12" fill="none" stroke-dasharray="502" stroke-dashoffset="0" class="transition-all duration-1000 ease-out" />
+                        <div class="card p-8 flex flex-col items-center justify-center flex-1 relative overflow-hidden">
+                            <h4 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Projected Setup Time</h4>
+                            <div class="relative w-56 h-56 flex items-center justify-center transition-all duration-500" id="gauge-container">
+                                <svg class="w-full h-full transform -rotate-90 drop-shadow-xl">
+                                    <circle cx="112" cy="112" r="90" stroke="#f1f5f9" stroke-width="20" fill="none" stroke-linecap="round" />
+                                    <circle id="sim-circle" cx="112" cy="112" r="90" stroke="#ef4444" stroke-width="20" fill="none" stroke-dasharray="565" stroke-dashoffset="0" class="transition-all duration-1000 ease-out" stroke-linecap="round" />
                                 </svg>
                                 <div class="absolute inset-0 flex flex-col items-center justify-center">
-                                    <span class="text-5xl font-bold text-slate-800" id="sim-time">60</span>
-                                    <span class="text-sm text-slate-500">min</span>
+                                    <span class="text-6xl font-black text-slate-800 tracking-tighter" id="sim-time">60</span>
+                                    <span class="text-sm font-bold text-slate-400 uppercase">Minutes</span>
                                 </div>
                             </div>
-                            <div id="sim-target-msg" class="text-xs font-bold text-red-500 mt-2 bg-red-50 px-2 py-1 rounded">Target Not Met (>10m)</div>
+                            <div id="sim-target-msg" class="text-xs font-black text-red-500 mt-6 bg-red-50 px-4 py-2 rounded-full border border-red-100 animate-pulse">TARGET MISSED (>10m)</div>
                         </div>
 
                         <!-- ROI Card -->
-                        <div class="card p-6 bg-slate-800 text-white border-none">
-                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Annual Savings</h4>
-                            <div class="flex justify-between items-end">
+                        <div class="card p-6 bg-slate-900 text-white border-none shadow-xl relative overflow-hidden group">
+                            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <i class="ph ph-currency-dollar text-9xl"></i>
+                            </div>
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Annual Savings Project</h4>
+                            <div class="flex justify-between items-end relative z-10">
                                 <div>
-                                    <span class="text-3xl font-bold" id="sim-savings">$0</span>
-                                    <p class="text-[10px] text-slate-400 mt-1">@ $450/hr Machine Rate</p>
+                                    <span class="text-4xl font-black tracking-tight" id="sim-savings">$0</span>
+                                    <p class="text-[10px] text-slate-400 mt-2 font-mono">@ $450/hr Machine Rate</p>
                                 </div>
                                 <div class="text-right">
-                                    <span class="block text-2xl font-bold text-green-400" id="sim-capacity">+0</span>
-                                    <span class="text-[10px] text-green-400 uppercase">Hrs Capacity</span>
+                                    <span class="block text-3xl font-bold text-green-400" id="sim-capacity">+0</span>
+                                    <span class="text-[10px] text-green-400 uppercase font-bold tracking-wider">Hrs Capacity</span>
                                 </div>
                             </div>
                         </div>
@@ -467,219 +547,155 @@
             </div>
 
             <!-- VIEW 4: CONTROL (Live Tool) -->
-            <div id="view-control" class="view-section hidden">
+            <div id="view-control" class="view-section hidden animate-fade-in">
                 <div class="grid grid-cols-12 gap-6">
                     
-                    <!-- Live Timer Tool -->
-                    <div class="col-span-12 lg:col-span-8 card p-0 overflow-hidden">
-                        <div class="bg-slate-800 p-4 flex justify-between items-center">
-                            <div>
-                                <h3 class="font-bold text-white flex items-center gap-2"><i class="ph ph-timer text-rose-500"></i> Changeover Assistant</h3>
-                                <p class="text-xs text-slate-400">Operator Mode: Line 4 Stamping</p>
-                            </div>
-                            <div class="text-right">
-                                <span class="text-xs text-slate-400 block">Standard Time</span>
-                                <span class="text-xl font-mono font-bold text-green-400">10:00</span>
-                            </div>
+                    <!-- Trend Chart -->
+                    <div class="col-span-12 card p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h4 class="font-bold text-sm text-slate-700">PDCA Progress: Changeover Reduction</h4>
+                            <span class="text-xs font-bold bg-blue-50 text-blue-600 px-3 py-1 rounded-full">Phase 3: Sustain</span>
                         </div>
-                        
-                        <div class="p-8 flex flex-col items-center justify-center bg-slate-50 min-h-[300px]">
-                            <div id="stopwatch-display" class="text-8xl font-mono font-bold text-slate-800 mb-8 tabular-nums tracking-tighter">00:00</div>
-                            
-                            <div class="flex gap-4 w-full max-w-md">
-                                <button onclick="timerAction('start')" id="btn-start" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 rounded-lg font-bold text-lg shadow-lg shadow-green-200 transition-all flex items-center justify-center gap-2">
-                                    <i class="ph ph-play-circle text-2xl"></i> START
-                                </button>
-                                <button onclick="timerAction('stop')" id="btn-stop" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-4 rounded-lg font-bold text-lg shadow-lg shadow-rose-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                                    <i class="ph ph-stop-circle text-2xl"></i> FINISH
-                                </button>
-                            </div>
-
-                            <div class="mt-8 w-full max-w-md bg-white rounded border border-slate-200 p-4">
-                                <p class="text-xs font-bold text-slate-500 uppercase mb-2">Step Progress</p>
-                                <div class="space-y-3">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-4 h-4 rounded-full bg-green-500"></div>
-                                        <span class="text-sm text-slate-600 line-through">1. Pre-Stage Die (External)</span>
-                                    </div>
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-4 h-4 rounded-full border-2 border-slate-300"></div>
-                                        <span class="text-sm font-bold text-slate-800">2. Lockout / Tagout</span>
-                                    </div>
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-4 h-4 rounded-full border-2 border-slate-300"></div>
-                                        <span class="text-sm text-slate-500">3. Release Clamps</span>
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="h-64">
+                            <canvas id="trendChart"></canvas>
                         </div>
                     </div>
 
                     <!-- Digital Andon -->
-                    <div class="col-span-12 lg:col-span-4 flex flex-col gap-4">
-                        <div class="card p-4 bg-slate-900 border-none text-center">
-                            <span class="text-xs text-slate-400 uppercase font-bold tracking-widest">Line Status</span>
-                            <div class="mt-2 text-4xl font-black text-green-500 animate-pulse">RUNNING</div>
-                            <span class="text-xs text-slate-500 mt-1">Since 08:30 AM</span>
-                        </div>
-                        
-                        <div class="card p-4">
-                            <h4 class="font-bold text-sm text-slate-700 mb-3 border-b pb-2">Recent Changeovers</h4>
-                            <div class="space-y-3">
-                                <div class="flex justify-between items-center text-sm">
-                                    <span class="text-slate-600">Shift A - 09:15</span>
-                                    <span class="font-mono font-bold text-green-600">09:42</span>
+                    <div class="col-span-12 lg:col-span-6 flex flex-col gap-6">
+                        <div class="card p-6 bg-slate-900 border-none text-center relative overflow-hidden">
+                            <div class="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900"></div>
+                            <div class="relative z-10">
+                                <span class="text-xs text-slate-400 uppercase font-black tracking-widest">Line Status</span>
+                                <div class="mt-4 mb-4 flex justify-center">
+                                    <span class="text-5xl font-black text-green-500 drop-shadow-[0_0_10px_rgba(34,197,94,0.5)]">RUNNING</span>
                                 </div>
-                                <div class="flex justify-between items-center text-sm">
-                                    <span class="text-slate-600">Shift B - 02:30</span>
-                                    <span class="font-mono font-bold text-green-600">10:15</span>
-                                </div>
-                                <div class="flex justify-between items-center text-sm">
-                                    <span class="text-slate-600">Shift B - 05:45</span>
-                                    <span class="font-mono font-bold text-red-500">14:20</span> <!-- Red because > 10 -->
+                                <div class="flex justify-center gap-4 text-xs font-bold">
+                                    <span class="text-slate-500 bg-slate-800 px-3 py-1 rounded">Target: >90%</span>
+                                    <span class="text-green-400 bg-green-900/30 px-3 py-1 rounded border border-green-900/50">Current: 96%</span>
                                 </div>
                             </div>
                         </div>
-
-                        <div class="card p-4 bg-blue-50 border-blue-100">
-                             <div class="flex items-start gap-3">
-                                 <i class="ph ph-info text-blue-600 text-xl"></i>
-                                 <div>
-                                     <h5 class="text-sm font-bold text-blue-800">Operator Note</h5>
-                                     <p class="text-xs text-blue-700 mt-1">Remember to clean the bolster plate <strong>before</strong> lowering the new die.</p>
-                                 </div>
-                             </div>
+                        
+                        <!-- Panic Button -->
+                        <button onclick="triggerPanic()" class="panic-btn w-full py-4 rounded-xl text-white font-black text-lg flex items-center justify-center gap-3 uppercase tracking-widest">
+                            <i class="ph ph-siren text-2xl animate-bounce"></i> Andon Pull (Help)
+                        </button>
+                    </div>
+                    
+                    <!-- Weld Status -->
+                    <div class="col-span-12 lg:col-span-6 flex flex-col gap-4">
+                         <div class="card p-6 border-2 border-green-100 bg-green-50/50 text-center flex flex-col justify-center h-full">
+                            <span class="text-xs text-green-800 uppercase font-black tracking-widest mb-2">Secondary Bottleneck</span>
+                            <div class="w-20 h-20 bg-white rounded-full mx-auto flex items-center justify-center shadow-sm mb-2">
+                                <i class="ph ph-fire text-3xl text-orange-500"></i>
+                            </div>
+                            <div class="text-4xl font-black text-green-700 tracking-tighter">1m 45s</div>
+                            <span class="text-xs text-green-600 mt-2 font-bold bg-white px-2 py-1 rounded inline-block mx-auto shadow-sm">Target: < 2 min</span>
                         </div>
                     </div>
 
                 </div>
             </div>
 
-            <!-- VIEW 5: GEMBA & KAIZEN (Assignments -> Industry Tools) -->
-            <div id="view-gemba" class="view-section hidden">
+            <!-- VIEW 5: GEMBA & KAIZEN -->
+            <div id="view-gemba" class="view-section hidden animate-fade-in">
                 <div class="grid grid-cols-12 gap-6 h-full">
                     
-                    <!-- Digital Gemba Walk (Assignment: Field Visit) -->
-                    <div class="col-span-12 lg:col-span-7 card p-0 overflow-hidden flex flex-col">
-                        <div class="bg-slate-800 p-4 border-b border-slate-700">
-                            <h3 class="font-bold text-white flex items-center gap-2"><i class="ph ph-eye text-rose-500"></i> Digital Gemba Walk</h3>
-                            <p class="text-xs text-slate-400">"Go and See" Observation Tool (Field Work)</p>
-                        </div>
-                        <div class="p-6 flex-1 overflow-y-auto">
-                            <div class="flex gap-4 mb-6 text-sm">
-                                <div class="flex-1 bg-slate-50 p-3 rounded border border-slate-200">
-                                    <span class="block text-slate-500 text-[10px] uppercase font-bold">Observer</span>
-                                    <span class="font-bold text-slate-800">Manager B.</span>
-                                </div>
-                                <div class="flex-1 bg-slate-50 p-3 rounded border border-slate-200">
-                                    <span class="block text-slate-500 text-[10px] uppercase font-bold">Focus Area</span>
-                                    <span class="font-bold text-slate-800">Stamping Setup</span>
-                                </div>
-                                <div class="flex-1 bg-slate-50 p-3 rounded border border-slate-200">
-                                    <span class="block text-slate-500 text-[10px] uppercase font-bold">Date</span>
-                                    <span class="font-bold text-slate-800">Today</span>
-                                </div>
+                    <!-- Digital Gemba Walk -->
+                    <div class="col-span-12 lg:col-span-7 card p-0 overflow-hidden flex flex-col shadow-lg">
+                        <div class="bg-slate-900 p-5 border-b border-slate-700 flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-white flex items-center gap-2 text-lg"><i class="ph ph-eye text-rose-500"></i> Waste Hunter</h3>
+                                <p class="text-xs text-slate-400">Digital Gemba Walk Tool</p>
                             </div>
-
-                            <h4 class="text-xs font-bold text-slate-500 uppercase mb-3">Waste Observation (TIMWOODS)</h4>
-                            <div class="space-y-3">
-                                <label class="flex items-center justify-between p-3 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer transition-colors">
-                                    <div class="flex items-center gap-3">
-                                        <input type="checkbox" class="w-4 h-4 text-rose-600 rounded">
+                            <div class="bg-slate-800 px-3 py-1 rounded text-xs font-mono text-green-400 border border-slate-700">
+                                Status: Active
+                            </div>
+                        </div>
+                        <div class="p-6 flex-1 overflow-y-auto bg-slate-50">
+                            
+                            <h4 class="text-xs font-black text-slate-400 uppercase mb-4 tracking-widest">Identify Waste (TIMWOODS)</h4>
+                            <div class="space-y-4">
+                                <div onclick="captureWaste(this)" class="group p-4 bg-white border-2 border-slate-200 rounded-xl hover:border-rose-400 hover:shadow-lg cursor-pointer transition-all relative overflow-hidden">
+                                    <div class="absolute right-0 top-0 bg-rose-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity">CLICK TO CAPTURE</div>
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-10 h-10 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                                            <i class="ph ph-person-simple-run"></i>
+                                        </div>
                                         <div>
-                                            <span class="block font-bold text-sm text-slate-800">Motion Waste</span>
+                                            <span class="block font-bold text-slate-800">Motion Waste</span>
                                             <span class="text-xs text-slate-500">Operators walking to fetch clamps?</span>
                                         </div>
                                     </div>
-                                    <span class="bg-red-100 text-red-700 text-[10px] px-2 py-1 rounded font-bold">High Priority</span>
-                                </label>
+                                </div>
                                 
-                                <label class="flex items-center justify-between p-3 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer transition-colors">
-                                    <div class="flex items-center gap-3">
-                                        <input type="checkbox" class="w-4 h-4 text-rose-600 rounded">
+                                <div onclick="captureWaste(this)" class="group p-4 bg-white border-2 border-slate-200 rounded-xl hover:border-orange-400 hover:shadow-lg cursor-pointer transition-all relative overflow-hidden">
+                                    <div class="absolute right-0 top-0 bg-orange-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity">CLICK TO CAPTURE</div>
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-10 h-10 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                                            <i class="ph ph-hourglass"></i>
+                                        </div>
                                         <div>
-                                            <span class="block font-bold text-sm text-slate-800">Waiting Waste</span>
+                                            <span class="block font-bold text-slate-800">Waiting Waste</span>
                                             <span class="text-xs text-slate-500">Machine idle while waiting for crane?</span>
                                         </div>
                                     </div>
-                                    <span class="bg-orange-100 text-orange-700 text-[10px] px-2 py-1 rounded font-bold">Med Priority</span>
-                                </label>
+                                </div>
 
-                                <label class="flex items-center justify-between p-3 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer transition-colors">
-                                    <div class="flex items-center gap-3">
-                                        <input type="checkbox" class="w-4 h-4 text-rose-600 rounded">
+                                <div onclick="captureWaste(this)" class="group p-4 bg-white border-2 border-slate-200 rounded-xl hover:border-purple-400 hover:shadow-lg cursor-pointer transition-all relative overflow-hidden">
+                                    <div class="absolute right-0 top-0 bg-purple-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity">CLICK TO CAPTURE</div>
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-10 h-10 rounded-full bg-purple-50 text-purple-500 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                                            <i class="ph ph-warning-circle"></i>
+                                        </div>
                                         <div>
-                                            <span class="block font-bold text-sm text-slate-800">Defects / Rework</span>
+                                            <span class="block font-bold text-slate-800">Defects / Rework</span>
                                             <span class="text-xs text-slate-500">First piece trial run failed?</span>
                                         </div>
                                     </div>
-                                </label>
+                                </div>
                             </div>
                             
-                            <button onclick="submitGemba()" class="mt-6 w-full bg-slate-800 text-white py-3 rounded text-sm font-bold hover:bg-slate-700 transition shadow-lg">Submit Observation Log</button>
+                            <div class="mt-6 text-center text-xs text-slate-400 italic">
+                                * Click items above to log them instantly
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Kaizen Idea Board (Assignment: Reflective Paper) -->
+                    <!-- Kaizen Board -->
                     <div class="col-span-12 lg:col-span-5 flex flex-col gap-6">
-                        <div class="card p-0 overflow-hidden flex-1 flex flex-col max-h-[400px]">
-                            <div class="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center shrink-0">
+                        <div class="card p-0 overflow-hidden flex-1 flex flex-col max-h-[500px] shadow-lg">
+                            <div class="bg-yellow-50 p-5 border-b border-yellow-100 flex justify-between items-center shrink-0">
                                 <div>
-                                    <h3 class="font-bold text-slate-800 flex items-center gap-2"><i class="ph ph-lightbulb text-yellow-500"></i> Kaizen Ideas</h3>
-                                    <p class="text-xs text-slate-500">Operator Reflections & Suggestions</p>
+                                    <h3 class="font-bold text-yellow-800 flex items-center gap-2 text-lg"><i class="ph ph-lightbulb text-yellow-600 font-fill"></i> Idea Board</h3>
                                 </div>
-                                <button onclick="addKaizen()" class="text-xs bg-white border border-slate-300 px-3 py-1.5 rounded shadow-sm hover:bg-slate-50 font-bold transition-colors">+ Add New</button>
+                                <button onclick="addKaizen()" class="text-xs bg-yellow-400 text-yellow-900 border border-yellow-500 px-4 py-2 rounded-lg shadow-sm hover:bg-yellow-300 font-bold transition-colors flex items-center gap-1">
+                                    <i class="ph ph-plus-circle font-bold"></i> New Idea
+                                </button>
                             </div>
-                            <div id="kaizen-container" class="p-4 bg-slate-50 overflow-y-auto space-y-3 flex-1">
+                            <div id="kaizen-container" class="p-6 bg-slate-50 overflow-y-auto space-y-4 flex-1 bg-[url('https://www.transparenttextures.com/patterns/cork-board.png')]">
                                 <!-- Sticky Note 1 -->
-                                <div class="bg-yellow-100 p-3 rounded shadow-sm border border-yellow-200 sticky-note cursor-pointer">
-                                    <p class="text-xs font-bold text-yellow-800 mb-1">Observation</p>
-                                    <p class="text-xs text-slate-700">"Red pen cap didn't fit yesterday. We need to check incoming material specs."</p>
-                                    <div class="mt-2 flex justify-between items-center">
-                                        <span class="text-[10px] text-slate-500">Submitted by: Operator 2</span>
-                                        <span class="text-[10px] bg-white px-1 rounded border border-yellow-200">New</span>
+                                <div class="bg-yellow-200 p-4 shadow-md sticky-note cursor-pointer transform -rotate-1 relative">
+                                    <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-red-800/20 shadow-inner"></div>
+                                    <p class="text-xs font-bold text-yellow-900 mb-2 uppercase tracking-wide opacity-50">Observation</p>
+                                    <p class="text-sm text-slate-800 font-handwriting leading-snug">"Red pen cap didn't fit yesterday. We need to check incoming material specs."</p>
+                                    <div class="mt-3 pt-2 border-t border-yellow-300/50 flex justify-between items-center">
+                                        <span class="text-[10px] text-yellow-800 font-bold">Op 2</span>
                                     </div>
                                 </div>
 
                                 <!-- Sticky Note 2 -->
-                                <div class="bg-green-100 p-3 rounded shadow-sm border border-green-200 sticky-note cursor-pointer">
-                                    <p class="text-xs font-bold text-green-800 mb-1">Improvement Idea</p>
-                                    <p class="text-xs text-slate-700">"Mark the floor for the tool cart so we don't have to look for it."</p>
-                                    <div class="mt-2 flex justify-between items-center">
-                                        <span class="text-[10px] text-slate-500">Submitted by: Team Lead</span>
-                                        <span class="text-[10px] bg-white px-1 rounded border border-green-200">Approved</span>
+                                <div class="bg-green-200 p-4 shadow-md sticky-note cursor-pointer transform rotate-2 relative">
+                                    <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-red-800/20 shadow-inner"></div>
+                                    <p class="text-xs font-bold text-green-900 mb-2 uppercase tracking-wide opacity-50">Kaizen</p>
+                                    <p class="text-sm text-slate-800 font-handwriting leading-snug">"Mark the floor for the tool cart so we don't have to look for it."</p>
+                                    <div class="mt-3 pt-2 border-t border-green-300/50 flex justify-between items-center">
+                                        <span class="text-[10px] text-green-800 font-bold">Team Lead</span>
+                                        <i class="ph ph-check-circle text-green-700 text-lg"></i>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- Capability Matrix (Addressing "Capability" issue from transcripts) -->
-                        <div class="card p-4 shrink-0">
-                            <h4 class="text-xs font-bold text-slate-500 uppercase mb-3">Operator Skill Matrix</h4>
-                            <table class="w-full text-xs text-left">
-                                <thead class="text-slate-400 font-medium border-b border-slate-100">
-                                    <tr>
-                                        <th class="pb-2">Name</th>
-                                        <th class="pb-2 text-center">Stamping</th>
-                                        <th class="pb-2 text-center">Welding</th>
-                                        <th class="pb-2 text-center">SMED</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="text-slate-700">
-                                    <tr class="border-b border-slate-50">
-                                        <td class="py-2 font-bold">John D.</td>
-                                        <td class="py-2 text-center text-green-600">●●●●</td>
-                                        <td class="py-2 text-center text-green-600">●●●○</td>
-                                        <td class="py-2 text-center text-green-600">●●●●</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="py-2 font-bold">Sarah M.</td>
-                                        <td class="py-2 text-center text-green-600">●●○○</td>
-                                        <td class="py-2 text-center text-green-600">●●●●</td>
-                                        <td class="py-2 text-center text-slate-300">○○○○</td>
-                                    </tr>
-                                </tbody>
-                            </table>
                         </div>
                     </div>
 
@@ -707,68 +723,50 @@
             document.getElementById('page-title').innerText = titles[tabId].t;
             document.getElementById('page-subtitle').innerText = titles[tabId].s;
 
-            if (tabId === 'define') {
-                // Ensure charts re-render when tab is visible
+            if (tabId === 'define' || tabId === 'control') {
                 setTimeout(renderCharts, 100);
             }
         }
 
         // --- Chart Logic ---
         function renderCharts() {
-            // 1. Loss Chart (Horizontal Bar for better readability)
+            // 1. Loss Chart
             const ctxLoss = document.getElementById('lossChart');
             if(ctxLoss) {
-                if (Chart.getChart("lossChart")) {
-                    Chart.getChart("lossChart").destroy();
-                }
+                if (Chart.getChart("lossChart")) Chart.getChart("lossChart").destroy();
                 new Chart(ctxLoss, {
                     type: 'bar',
-                    indexAxis: 'y', // Horizontal
+                    indexAxis: 'y',
                     data: {
                         labels: ['Setup (Changeover)', 'Breakdowns', 'Minor Stops', 'Speed Loss', 'Defects'],
                         datasets: [{
                             label: 'Hours Lost / Month',
                             data: [44, 12, 8, 5, 2],
                             backgroundColor: ['#e11d48', '#94a3b8', '#94a3b8', '#94a3b8', '#94a3b8'],
-                            borderRadius: 4,
-                            barThickness: 20
+                            borderRadius: 6,
+                            barThickness: 24
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: { legend: { display: false } },
-                        scales: { 
-                            x: { grid: { display: false } }, 
-                            y: { grid: { display: false } } 
-                        }
+                        scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
                     }
                 });
             }
 
-            // 2. Composition Chart (Quantifying Value vs Waste)
+            // 2. Composition Chart
             const ctxComp = document.getElementById('compositionChart');
             if(ctxComp) {
-                if (Chart.getChart("compositionChart")) {
-                    Chart.getChart("compositionChart").destroy();
-                }
+                if (Chart.getChart("compositionChart")) Chart.getChart("compositionChart").destroy();
                 new Chart(ctxComp, {
                     type: 'bar',
                     data: {
                         labels: ['Total Time'],
                         datasets: [
-                            {
-                                label: 'Value Added (Run)',
-                                data: [65],
-                                backgroundColor: '#22c55e',
-                                barThickness: 40
-                            },
-                            {
-                                label: 'Non-Value Added (Setup)',
-                                data: [35],
-                                backgroundColor: '#e11d48',
-                                barThickness: 40
-                            }
+                            { label: 'Value Added (Run)', data: [65], backgroundColor: '#22c55e', barThickness: 50, borderRadius: {topLeft: 6, bottomLeft: 6} },
+                            { label: 'Non-Value Added (Setup)', data: [35], backgroundColor: '#e11d48', barThickness: 50, borderRadius: {topRight: 6, bottomRight: 6} }
                         ]
                     },
                     options: {
@@ -776,10 +774,43 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: { legend: { position: 'bottom' } },
-                        scales: { 
-                            x: { stacked: true, max: 100, grid: { display: false } }, 
-                            y: { stacked: true, grid: { display: false }, display: false } 
-                        }
+                        scales: { x: { stacked: true, max: 100, grid: { display: false } }, y: { stacked: true, grid: { display: false }, display: false } }
+                    }
+                });
+            }
+
+            // 3. Trend Chart
+            const ctxTrend = document.getElementById('trendChart');
+            if(ctxTrend) {
+                if (Chart.getChart("trendChart")) Chart.getChart("trendChart").destroy();
+                new Chart(ctxTrend, {
+                    type: 'line',
+                    data: {
+                        labels: ['Baseline (Current)', 'Exp 1: Tools/Seq', 'Exp 2: Clamps (SMED)', 'Sustain', 'Future State'],
+                        datasets: [{
+                            label: 'Setup Time (min)',
+                            data: [60, 30, 10, 9, 8],
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 6,
+                            pointBackgroundColor: '#fff',
+                            pointBorderWidth: 3
+                        },
+                        {
+                            label: 'Target (<10m)',
+                            data: [10, 10, 10, 10, 10],
+                            borderColor: '#22c55e',
+                            borderDash: [5, 5],
+                            pointRadius: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top' } },
+                        scales: { y: { beginAtZero: true } }
                     }
                 });
             }
@@ -789,89 +820,83 @@
         function toggleVSM(state) {
             const btnC = document.getElementById('vsm-btn-current');
             const btnF = document.getElementById('vsm-btn-future');
-            
-            // Stamping Data Elements
             const co = document.getElementById('val-stamping-co');
             const avail = document.getElementById('val-stamping-avail');
             const inv = document.getElementById('val-inventory');
             const ladder = document.getElementById('ladder-lead');
+            const weldCo = document.getElementById('val-weld-co');
 
             if (state === 'future') {
-                btnF.classList.add('bg-white', 'shadow', 'text-slate-800', 'font-bold');
-                btnF.classList.remove('text-slate-500', 'font-medium');
-                btnC.classList.remove('bg-white', 'shadow', 'text-slate-800', 'font-bold');
-                btnC.classList.add('text-slate-500', 'font-medium');
+                btnF.classList.add('bg-slate-800', 'text-white', 'shadow-lg');
+                btnF.classList.remove('text-slate-500', 'hover:bg-white/50');
+                btnC.classList.remove('bg-white', 'shadow-md', 'text-slate-800');
+                btnC.classList.add('text-slate-500', 'hover:bg-white/50');
 
-                // Update VSM Values
+                // Update Values
                 co.innerHTML = '<span>C/O:</span> <b>< 10 min</b>';
                 co.className = 'flex justify-between text-green-600 font-bold bg-green-50 px-1 rounded';
                 avail.innerHTML = '<span>Avail:</span> <b>96%</b>';
-                inv.innerHTML = '600'; // Reduced inventory
-                inv.className = 'text-xs font-bold text-green-600 mt-1';
-                ladder.innerText = 'Lead Time: 0.5 Days';
-                ladder.className = 'flex-1 bg-green-50 p-2 text-center text-green-700 font-bold border-r border-slate-300 transition-all';
+                inv.innerHTML = 'Reduced';
+                inv.className = 'text-xs font-bold text-green-600 mt-2 bg-green-50 px-2 py-1 rounded border border-green-100';
+                weldCo.innerHTML = '<span>C/O:</span> <b>< 2 min</b>';
+                weldCo.className = 'flex justify-between text-green-600 font-bold';
+                ladder.innerHTML = '<span class="uppercase tracking-widest opacity-50 text-[10px]">Total Lead Time</span><span class="text-2xl animate-pulse">4.5 Days</span>';
+                ladder.className = 'flex-1 bg-green-50 p-4 text-center text-green-700 font-black border-r-2 border-slate-300 transition-all flex flex-col items-center justify-center gap-1';
+                
+                // Confetti for Future State
+                confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
             } else {
-                btnC.classList.add('bg-white', 'shadow', 'text-slate-800', 'font-bold');
-                btnC.classList.remove('text-slate-500', 'font-medium');
-                btnF.classList.remove('bg-white', 'shadow', 'text-slate-800', 'font-bold');
-                btnF.classList.add('text-slate-500', 'font-medium');
+                btnC.classList.add('bg-white', 'shadow-md', 'text-slate-800');
+                btnC.classList.remove('text-slate-500', 'hover:bg-white/50');
+                btnF.classList.remove('bg-slate-800', 'text-white', 'shadow-lg');
+                btnF.classList.add('text-slate-500', 'hover:bg-white/50');
 
                 // Reset
                 co.innerHTML = '<span>C/O:</span> <b>60 min</b>';
                 co.className = 'flex justify-between text-red-600 font-bold bg-red-50 px-1 rounded';
                 avail.innerHTML = '<span>Avail:</span> <b>85%</b>';
-                inv.innerHTML = '4,600';
-                inv.className = 'text-xs font-bold text-red-600 mt-1';
-                ladder.innerText = 'Lead Time: 5 Days';
-                ladder.className = 'flex-1 bg-red-50 p-2 text-center text-red-700 font-bold border-r border-slate-300 transition-all';
+                inv.innerHTML = 'Huge WIP';
+                inv.className = 'text-xs font-bold text-red-600 mt-2 bg-red-50 px-2 py-1 rounded border border-red-100';
+                weldCo.innerHTML = '<span>C/O:</span> <b>10 min</b>';
+                weldCo.className = 'flex justify-between text-orange-600 font-bold';
+                ladder.innerHTML = '<span class="uppercase tracking-widest opacity-50 text-[10px]">Total Lead Time</span><span class="text-2xl">9 Days</span>';
+                ladder.className = 'flex-1 bg-red-50 p-4 text-center text-red-700 font-black border-r-2 border-slate-300 transition-all flex flex-col items-center justify-center gap-1';
             }
         }
 
         // --- Simulator Logic ---
         function updateSimulation() {
-            let currentTime = 60; // Baseline
+            let currentTime = 60; 
             const toggles = document.querySelectorAll('.impact-toggle:checked');
-            
-            toggles.forEach(t => {
-                currentTime -= parseInt(t.value);
-            });
+            toggles.forEach(t => currentTime -= parseInt(t.value));
 
-            // Update Time Display
-            const timeDisplay = document.getElementById('sim-time');
-            timeDisplay.innerText = currentTime;
-
-            // Update Circle Stroke (Gauge)
-            // Circumference 2 * pi * 80 = ~502
-            // 60 mins = full red circle (offset 0)
-            // 0 mins = empty circle (offset 502)
+            document.getElementById('sim-time').innerText = currentTime;
             const circle = document.getElementById('sim-circle');
-            const percent = currentTime / 60; 
-            const offset = 502 * (1 - percent); // Invert because stroke draws backwards
-            // Logic correction: 60m should fill bar. 10m should be small.
-            // Actually, let's make full bar = 60m. 
-            // So offset should be 0 at 60m.
-            // At 10m, it is 1/6th filled? Or do we want to show reduction?
-            // Let's show "Remaining Time".
-            // 60m = full circle (502 offset 0). 30m = half circle (offset 251).
-            const dashOffset = 502 * (1 - (currentTime / 60));
+            const dashOffset = 565 * (1 - (currentTime / 60));
             circle.style.strokeDashoffset = dashOffset;
 
-            // Color Change
             if (currentTime <= 10) {
-                circle.style.stroke = '#22c55e'; // Green
-                document.getElementById('sim-target-msg').innerText = "TARGET ACHIEVED";
-                document.getElementById('sim-target-msg').className = "text-xs font-bold text-green-600 mt-2 bg-green-50 px-2 py-1 rounded";
+                circle.style.stroke = '#22c55e';
+                const msg = document.getElementById('sim-target-msg');
+                msg.innerText = "TARGET ACHIEVED! 🎉";
+                msg.className = "text-xs font-black text-green-600 mt-6 bg-green-50 px-4 py-2 rounded-full border border-green-100 animate-bounce";
+                
+                // Trigger Confetti
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
             } else {
-                circle.style.stroke = '#ef4444'; // Red
-                document.getElementById('sim-target-msg').innerText = "Target Not Met (>10m)";
-                document.getElementById('sim-target-msg').className = "text-xs font-bold text-red-500 mt-2 bg-red-50 px-2 py-1 rounded";
+                circle.style.stroke = '#ef4444';
+                const msg = document.getElementById('sim-target-msg');
+                msg.innerText = "TARGET MISSED (>10m)";
+                msg.className = "text-xs font-black text-red-500 mt-6 bg-red-50 px-4 py-2 rounded-full border border-red-100";
             }
 
-            // Financials
             const timeSavedPerSetup = 60 - currentTime;
-            const setupsPerMonth = 44; // From Define tab
+            const setupsPerMonth = 44; 
             const hourlyRate = 450;
-            
             const hoursSaved = (timeSavedPerSetup * setupsPerMonth) / 60;
             const dollarsSaved = hoursSaved * hourlyRate;
 
@@ -879,113 +904,74 @@
             document.getElementById('sim-savings').innerText = "$" + dollarsSaved.toLocaleString(undefined, {maximumFractionDigits:0});
         }
 
-        // --- Live Timer Logic ---
-        let timerInterval;
-        let seconds = 0;
-        let isRunning = false;
-
-        function timerAction(action) {
-            const display = document.getElementById('stopwatch-display');
-            const btnStart = document.getElementById('btn-start');
-            const btnStop = document.getElementById('btn-stop');
-
-            if (action === 'start') {
-                if(isRunning) return;
-                isRunning = true;
-                btnStart.disabled = true;
-                btnStop.disabled = false;
-                btnStop.classList.remove('opacity-50', 'cursor-not-allowed');
-                btnStart.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                // Add visual cue
-                display.parentElement.classList.add('recording');
-
-                timerInterval = setInterval(() => {
-                    seconds++;
-                    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-                    const s = (seconds % 60).toString().padStart(2, '0');
-                    display.innerText = `${m}:${s}`;
-                }, 1000);
-            } else {
-                clearInterval(timerInterval);
-                isRunning = false;
-                display.parentElement.classList.remove('recording');
-                btnStart.disabled = false;
-                btnStop.disabled = true;
-                btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
-                btnStop.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                // Mock Saving using new Toast
-                showToast(`Changeover Recorded: ${display.innerText}`);
-                seconds = 0;
-                display.innerText = "00:00";
-            }
+        // --- Panic Button Logic ---
+        function triggerPanic() {
+            const overlay = document.getElementById('panic-overlay');
+            overlay.style.display = 'flex';
+            
+            // Play sound effect (optional/browser dependent, omitting for safety but visual is enough)
+            
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                showToast("Maintenance Team Alerted!", "error");
+            }, 3000);
         }
-        
-        // --- GEMBA Logic ---
-        function submitGemba() {
-            const checkboxes = document.querySelectorAll('#view-gemba input[type="checkbox"]:checked');
-            if(checkboxes.length === 0) {
-                showToast("Please select at least one item!", "error");
-                return;
-            }
-            showToast(`${checkboxes.length} observations logged successfully!`, "success");
-            // Reset checkboxes
-            document.querySelectorAll('#view-gemba input[type="checkbox"]').forEach(cb => cb.checked = false);
+
+        // --- Waste Hunter Game Logic ---
+        function captureWaste(element) {
+            // Visual Effect
+            element.classList.add('border-green-500', 'bg-green-50');
+            element.classList.remove('border-slate-200', 'bg-white');
+            
+            const icon = element.querySelector('i');
+            icon.classList.remove('text-rose-500', 'text-orange-500', 'text-purple-500');
+            icon.classList.add('text-green-500', 'scale-125');
+            
+            showToast("Waste Captured! +10 Points");
+            
+            // Reset after delay
+            setTimeout(() => {
+                element.classList.remove('border-green-500', 'bg-green-50');
+                element.classList.add('border-slate-200', 'bg-white');
+                icon.classList.remove('text-green-500', 'scale-125');
+                // Re-add original colors would need complex logic, keeping simple reset
+                icon.classList.add('text-slate-400'); 
+            }, 2000);
         }
 
         // --- KAIZEN Logic ---
         function addKaizen() {
             const container = document.getElementById('kaizen-container');
-            
-            const ideas = [
-                "Install a shadow board for the 5mm wrench.",
-                "Rotate the raw material bin 90 degrees.",
-                "Label the hydraulic hoses with color codes.",
-                "Create a dedicated cart for clean-up supplies."
-            ];
+            const ideas = ["Install a shadow board.", "Rotate the raw material bin.", "Label the hydraulic hoses.", "Create a dedicated cart."];
             const randomIdea = ideas[Math.floor(Math.random() * ideas.length)];
             
             const newNote = document.createElement('div');
-            newNote.className = 'bg-blue-50 p-3 rounded shadow-sm border border-blue-200 sticky-note cursor-pointer animate-fade-in';
+            newNote.className = 'bg-blue-200 p-4 shadow-md sticky-note cursor-pointer transform rotate-1 relative animate-fade-in';
             newNote.innerHTML = `
-                <p class="text-xs font-bold text-blue-800 mb-1">New Suggestion</p>
-                <p class="text-xs text-slate-700">"${randomIdea}"</p>
-                <div class="mt-2 flex justify-between items-center">
-                    <span class="text-[10px] text-slate-500">Submitted by: You</span>
-                    <span class="text-[10px] bg-white px-1 rounded border border-blue-200 text-blue-600 font-bold">Just Now</span>
+                <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-red-800/20 shadow-inner"></div>
+                <p class="text-xs font-bold text-blue-900 mb-2 uppercase tracking-wide opacity-50">Idea</p>
+                <p class="text-sm text-slate-800 font-handwriting leading-snug">"${randomIdea}"</p>
+                <div class="mt-3 pt-2 border-t border-blue-300/50 flex justify-between items-center">
+                    <span class="text-[10px] text-blue-800 font-bold">You</span>
+                    <span class="text-[10px] font-bold text-blue-600">Just Now</span>
                 </div>
             `;
-            container.prepend(newNote); // Add to top
+            container.prepend(newNote);
         }
 
         // --- TOAST NOTIFICATION SYSTEM ---
         function showToast(message, type = "success") {
             const container = document.getElementById('toast-container');
-            
             const toast = document.createElement('div');
             toast.className = 'toast';
-            
-            // Set Color based on type
             const borderColor = type === 'error' ? '#ef4444' : '#22c55e';
-            const icon = type === 'error' ? '<i class="ph ph-warning-circle text-red-500 text-xl"></i>' : '<i class="ph ph-check-circle text-green-500 text-xl"></i>';
+            const icon = type === 'error' ? '<i class="ph ph-warning-circle text-red-500 text-2xl"></i>' : '<i class="ph ph-check-circle text-green-500 text-2xl"></i>';
             
             toast.style.borderLeftColor = borderColor;
-            
-            toast.innerHTML = `
-                ${icon}
-                <div>
-                    <p class="text-sm font-bold text-slate-800">System Notification</p>
-                    <p class="text-xs text-slate-500">${message}</p>
-                </div>
-            `;
+            toast.innerHTML = `${icon}<div><p class="text-sm font-bold text-slate-800">System Notification</p><p class="text-xs text-slate-500">${message}</p></div>`;
             
             container.appendChild(toast);
-            
-            // Trigger animation
             setTimeout(() => toast.classList.add('show'), 10);
-            
-            // Remove after 3 seconds
             setTimeout(() => {
                 toast.classList.remove('show');
                 setTimeout(() => toast.remove(), 300);
