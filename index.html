@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACME Stamping: Lean Ops Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; }
+        
+        /* Dashboard Sidebar Styling */
+        .nav-item { transition: all 0.2s; border-left: 3px solid transparent; }
+        .nav-item:hover { background-color: #1e293b; }
+        .nav-item.active { background-color: #1e293b; border-left-color: #e11d48; color: white; }
+        .nav-item.active i { color: #e11d48; }
+        
+        /* Card Styling */
+        .card { 
+            background: white; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 0.5rem; 
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        
+        /* VSM Box Styling */
+        .vsm-process {
+            background: white;
+            border: 2px solid #334155;
+            padding: 0.5rem;
+            width: 140px;
+            text-align: center;
+            position: relative;
+            z-index: 10;
+        }
+        .vsm-data-box {
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            font-size: 0.7rem;
+            text-align: left;
+            padding: 4px;
+            margin-top: 4px;
+        }
+        .vsm-arrow {
+            flex-grow: 1;
+            height: 2px;
+            background: #94a3b8;
+            position: relative;
+            margin: 0 10px;
+        }
+        .vsm-arrow::after {
+            content: '';
+            position: absolute;
+            right: 0; top: -4px;
+            border-top: 5px solid transparent;
+            border-bottom: 5px solid transparent;
+            border-left: 6px solid #94a3b8;
+        }
+        .vsm-inventory {
+            color: #ef4444;
+            font-size: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Toggle Switch */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #e11d48;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #e11d48;
+        }
+        
+        /* Timer Animation */
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(225, 29, 72, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); }
+        }
+        .recording {
+            animation: pulse-red 2s infinite;
+        }
+
+        /* Sticky Note Styling for Kaizen Board */
+        .sticky-note {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .sticky-note:hover {
+            transform: scale(1.02);
+            z-index: 10;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        /* Fade in animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        /* Toast Notification */
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 50;
+        }
+        .toast {
+            background: white;
+            border-left: 4px solid #22c55e;
+            padding: 1rem;
+            border-radius: 4px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 300px;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        }
+        .toast.show {
+            transform: translateX(0);
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-900 text-slate-400 flex flex-col flex-shrink-0 z-20 shadow-xl">
+        <div class="p-6 border-b border-slate-800 flex items-center gap-3">
+            <div class="w-10 h-10 bg-rose-600 rounded flex items-center justify-center text-white font-bold text-lg">A</div>
+            <div>
+                <h1 class="text-white font-bold leading-tight">ACME<br>Stamping</h1>
+            </div>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto py-6 space-y-1">
+            <button onclick="switchTab('define')" id="btn-define" class="nav-item w-full flex items-center gap-3 px-6 py-3 text-left active">
+                <i class="ph ph-target text-xl"></i>
+                <span class="font-medium text-sm">1. Define & Quantify</span>
+            </button>
+            <button onclick="switchTab('map')" id="btn-map" class="nav-item w-full flex items-center gap-3 px-6 py-3 text-left">
+                <i class="ph ph-tree-structure text-xl"></i>
+                <span class="font-medium text-sm">2. Value Stream Map</span>
+            </button>
+            <button onclick="switchTab('countermeasures')" id="btn-countermeasures" class="nav-item w-full flex items-center gap-3 px-6 py-3 text-left">
+                <i class="ph ph-wrench text-xl"></i>
+                <span class="font-medium text-sm">3. Solution Simulator</span>
+            </button>
+            <button onclick="switchTab('control')" id="btn-control" class="nav-item w-full flex items-center gap-3 px-6 py-3 text-left">
+                <i class="ph ph-chart-line-up text-xl"></i>
+                <span class="font-medium text-sm">4. Shop Floor Control</span>
+            </button>
+            <button onclick="switchTab('gemba')" id="btn-gemba" class="nav-item w-full flex items-center gap-3 px-6 py-3 text-left">
+                <i class="ph ph-binoculars text-xl"></i>
+                <span class="font-medium text-sm">5. Gemba & Kaizen</span>
+            </button>
+        </nav>
+
+        <div class="p-4 bg-slate-800">
+            <div class="flex items-center gap-3 mb-3">
+                <img src="https://ui-avatars.com/api/?name=John+Doe&background=334155&color=fff" class="w-8 h-8 rounded-full">
+                <div>
+                    <p class="text-xs text-white font-bold">J. Smith</p>
+                    <p class="text-[10px] text-slate-400">Plant Manager</p>
+                </div>
+            </div>
+            <div class="flex justify-between text-[10px] text-slate-400 border-t border-slate-700 pt-2">
+                <span>Shift: A</span>
+                <span>Line: 4</span>
+                <span class="text-green-400">● Online</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto relative">
+        <!-- Top Bar -->
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-10 px-8 py-4 flex justify-between items-center shadow-sm">
+            <div>
+                <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2" id="page-title">Define the Problem</h2>
+                <div class="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                    <span class="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">Project: SMED-2025</span>
+                    <i class="ph ph-caret-right"></i>
+                    <span id="page-subtitle">Problem Statement</span>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <div class="text-right mr-4 border-r border-slate-200 pr-4 hidden md:block">
+                    <p class="text-[10px] text-slate-400 uppercase font-bold">Current OEE</p>
+                    <p class="text-lg font-bold text-slate-700">85% <span class="text-green-500 text-xs">▲ 2%</span></p>
+                </div>
+                <button onclick="showToast('PDF Export started...')" class="bg-white border border-slate-300 text-slate-700 px-3 py-2 rounded shadow-sm hover:bg-slate-50 text-sm font-medium flex items-center gap-2">
+                    <i class="ph ph-download-simple"></i> Export
+                </button>
+                <button class="bg-rose-600 text-white px-3 py-2 rounded shadow hover:bg-rose-700 text-sm font-medium flex items-center gap-2">
+                    <i class="ph ph-share-network"></i> Share
+                </button>
+            </div>
+        </header>
+
+        <div class="p-8 max-w-7xl mx-auto">
+            
+            <!-- VIEW 1: DEFINE -->
+            <div id="view-define" class="view-section block animate-fade">
+                <div class="grid grid-cols-12 gap-6">
+                    <!-- Problem Card -->
+                    <div class="col-span-12 lg:col-span-8 card p-6 border-l-4 border-l-rose-500">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="font-bold text-lg text-slate-800">Problem Statement</h3>
+                            <span class="bg-red-50 text-red-600 px-2 py-1 rounded text-xs font-bold border border-red-100">CRITICAL</span>
+                        </div>
+                        <p class="text-slate-600 text-sm leading-relaxed mb-4">
+                            Stamping changeovers currently take <strong>60 minutes</strong> (Internal), forcing large batch sizes and high inventory buffers (4,600 units). This rigidity prevents ACME from meeting State Street Assembly's mixed-model daily demand without overtime or expedited freight.
+                        </p>
+                        <div class="grid grid-cols-3 gap-4 mt-6">
+                            <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                                <span class="text-[10px] text-slate-500 uppercase font-bold">Setup Time</span>
+                                <div class="text-2xl font-bold text-slate-800">60 <span class="text-sm font-normal text-slate-500">min</span></div>
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                                <span class="text-[10px] text-slate-500 uppercase font-bold">WIP Buffer</span>
+                                <div class="text-2xl font-bold text-slate-800">4.6k <span class="text-sm font-normal text-slate-500">units</span></div>
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                                <span class="text-[10px] text-slate-500 uppercase font-bold">Cust. Demand</span>
+                                <div class="text-2xl font-bold text-slate-800">18.4k <span class="text-sm font-normal text-slate-500">/mo</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Customer Context -->
+                    <div class="col-span-12 lg:col-span-4 card p-6">
+                        <h3 class="font-bold text-sm text-slate-800 mb-4 uppercase tracking-wide">Customer Voice</h3>
+                        <div class="flex items-center gap-4 mb-4">
+                            <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                                <i class="ph ph-buildings text-2xl"></i>
+                            </div>
+                            <div>
+                                <p class="font-bold text-slate-800">State Street Assembly</p>
+                                <p class="text-xs text-slate-500">Just-in-Time (JIT) Plant</p>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Takt Time Requirement</span>
+                                <span class="font-bold text-slate-700">~60 sec</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Delivery Frequency</span>
+                                <span class="font-bold text-slate-700">Daily</span>
+                            </div>
+                            <div class="w-full bg-slate-100 h-1 mt-2">
+                                <div class="bg-blue-500 h-1" style="width: 80%"></div>
+                            </div>
+                            <p class="text-[10px] text-right text-slate-400">Satisfaction Score: 80%</p>
+                        </div>
+                    </div>
+
+                    <!-- Pareto Chart (Horizontal for better readability) -->
+                    <div class="col-span-12 lg:col-span-6 card p-6">
+                        <h4 class="font-bold text-sm text-slate-700 mb-4">Loss Analysis (Pareto)</h4>
+                        <div class="h-48">
+                            <canvas id="lossChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Time Composition Chart (New) -->
+                    <div class="col-span-12 lg:col-span-6 card p-6">
+                        <h4 class="font-bold text-sm text-slate-700 mb-4">Total Available Time Composition</h4>
+                        <div class="h-48">
+                            <canvas id="compositionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 2: MAP (Interactive VSM) -->
+            <div id="view-map" class="view-section hidden">
+                <div class="card p-6 min-h-[500px]">
+                    <div class="flex justify-between items-center mb-8 border-b border-slate-100 pb-4">
+                        <div>
+                            <h3 class="font-bold text-lg text-slate-800">Value Stream Map</h3>
+                            <p class="text-xs text-slate-500">Stamping &rarr; Weld &rarr; Ship</p>
+                        </div>
+                        <div class="flex items-center gap-3 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                            <button onclick="toggleVSM('current')" id="vsm-btn-current" class="px-4 py-1.5 rounded text-xs font-bold bg-white shadow text-slate-800 transition-all">Current State</button>
+                            <button onclick="toggleVSM('future')" id="vsm-btn-future" class="px-4 py-1.5 rounded text-xs font-medium text-slate-500 hover:text-slate-700 transition-all">Future State</button>
+                        </div>
+                    </div>
+
+                    <!-- VSM Diagram -->
+                    <div class="flex items-start justify-center overflow-x-auto py-6" id="vsm-container">
+                        <!-- Supplier -->
+                        <div class="flex flex-col items-center mx-4">
+                            <div class="w-20 h-12 bg-slate-800 text-white flex items-center justify-center rounded-lg text-xs font-bold mb-2 shadow-lg">Michigan<br>Steel</div>
+                            <i class="ph ph-truck text-2xl text-slate-400"></i>
+                            <span class="text-[10px] text-slate-400">2x / Week</span>
+                        </div>
+
+                        <div class="vsm-arrow mt-6"></div>
+
+                        <!-- Process 1: Stamping -->
+                        <div class="flex flex-col gap-2">
+                            <div class="vsm-process shadow-sm">
+                                <div class="font-bold text-sm">Stamping</div>
+                                <div class="text-[10px] text-slate-500">1 Press</div>
+                                <i class="ph ph-wrench absolute top-1 right-1 text-slate-300 text-xs"></i>
+                            </div>
+                            <div class="vsm-data-box" id="data-stamping">
+                                <div class="flex justify-between"><span>C/T:</span> <b>1 sec</b></div>
+                                <div class="flex justify-between text-red-600 font-bold bg-red-50 px-1 rounded transition-colors" id="val-stamping-co"><span>C/O:</span> <b>60 min</b></div>
+                                <div class="flex justify-between transition-colors" id="val-stamping-avail"><span>Avail:</span> <b>85%</b></div>
+                            </div>
+                        </div>
+
+                        <!-- Inventory -->
+                        <div class="flex flex-col items-center justify-center px-4 mt-6">
+                            <i class="ph ph-warning-triangle text-yellow-500 text-3xl animate-bounce"></i>
+                            <span class="text-xs font-bold text-red-600 mt-1" id="val-inventory">4,600</span>
+                            <span class="text-[10px] text-slate-400">WIP</span>
+                        </div>
+
+                        <!-- Process 2: Welding -->
+                        <div class="flex flex-col gap-2">
+                            <div class="vsm-process shadow-sm">
+                                <div class="font-bold text-sm">Spot Weld</div>
+                                <div class="text-[10px] text-slate-500">2 Cells</div>
+                            </div>
+                            <div class="vsm-data-box">
+                                <div class="flex justify-between"><span>C/T:</span> <b>40 sec</b></div>
+                                <div class="flex justify-between text-orange-600 font-bold" id="val-weld-co"><span>C/O:</span> <b>10 min</b></div>
+                                <div class="flex justify-between" id="val-weld-rel"><span>Rel:</span> <b>80%</b></div>
+                            </div>
+                        </div>
+
+                        <div class="vsm-arrow mt-6"></div>
+
+                        <!-- Customer -->
+                        <div class="flex flex-col items-center mx-4">
+                            <div class="w-20 h-12 bg-slate-800 text-white flex items-center justify-center rounded-lg text-xs font-bold mb-2 shadow-lg">State<br>Street</div>
+                            <i class="ph ph-truck text-2xl text-slate-400"></i>
+                            <span class="text-[10px] text-slate-400">Daily</span>
+                        </div>
+                    </div>
+
+                    <!-- Lead Time Ladder -->
+                    <div class="mt-12 mx-auto max-w-2xl">
+                        <div class="flex text-xs border border-slate-300 rounded overflow-hidden">
+                            <div class="flex-1 bg-red-50 p-2 text-center text-red-700 font-bold border-r border-slate-300 transition-all" id="ladder-lead">
+                                Lead Time: 5 Days
+                            </div>
+                            <div class="flex-1 bg-green-50 p-2 text-center text-green-700 font-bold">
+                                Value Added: 41 Seconds
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 3: COUNTERMEASURES (Simulator) -->
+            <div id="view-countermeasures" class="view-section hidden">
+                <div class="grid grid-cols-12 gap-6">
+                    <!-- Scenario Builder -->
+                    <div class="col-span-12 lg:col-span-7 card p-0 overflow-hidden">
+                        <div class="bg-slate-900 p-4 border-b border-slate-800">
+                            <h3 class="font-bold text-white">SMED Solution Simulator</h3>
+                            <p class="text-xs text-slate-400">Select improvements to model future state capability.</p>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            
+                            <!-- Toggle 1 -->
+                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:border-rose-200 transition-colors">
+                                <div class="flex gap-4">
+                                    <div class="w-10 h-10 rounded bg-green-100 text-green-600 flex items-center justify-center text-xl"><i class="ph ph-arrows-out-line-horizontal"></i></div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">Externalize Setup (Pre-stage)</h4>
+                                        <p class="text-xs text-slate-500">Perform 50% of tasks while machine is running.</p>
+                                    </div>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" value="30" class="sr-only peer impact-toggle" onchange="updateSimulation()">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-rose-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                                </label>
+                            </div>
+
+                            <!-- Toggle 2 -->
+                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:border-rose-200 transition-colors">
+                                <div class="flex gap-4">
+                                    <div class="w-10 h-10 rounded bg-blue-100 text-blue-600 flex items-center justify-center text-xl"><i class="ph ph-wrench"></i></div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">Quick Release Clamps</h4>
+                                        <p class="text-xs text-slate-500">Replace bolts with hand-actuated clamps.</p>
+                                    </div>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" value="15" class="sr-only peer impact-toggle" onchange="updateSimulation()">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-rose-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                                </label>
+                            </div>
+
+                            <!-- Toggle 3 -->
+                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:border-rose-200 transition-colors">
+                                <div class="flex gap-4">
+                                    <div class="w-10 h-10 rounded bg-purple-100 text-purple-600 flex items-center justify-center text-xl"><i class="ph ph-list-checks"></i></div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">5S & Standard Work</h4>
+                                        <p class="text-xs text-slate-500">Color-coded dies, shadow boards, no searching.</p>
+                                    </div>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" value="5" class="sr-only peer impact-toggle" onchange="updateSimulation()">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-rose-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                                </label>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- Results Panel -->
+                    <div class="col-span-12 lg:col-span-5 flex flex-col gap-6">
+                        <!-- Time Gauge -->
+                        <div class="card p-6 flex flex-col items-center justify-center flex-1">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Projected Setup Time</h4>
+                            <div class="relative w-48 h-48 flex items-center justify-center">
+                                <svg class="w-full h-full transform -rotate-90">
+                                    <circle cx="96" cy="96" r="80" stroke="#f1f5f9" stroke-width="12" fill="none" />
+                                    <circle id="sim-circle" cx="96" cy="96" r="80" stroke="#ef4444" stroke-width="12" fill="none" stroke-dasharray="502" stroke-dashoffset="0" class="transition-all duration-1000 ease-out" />
+                                </svg>
+                                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span class="text-5xl font-bold text-slate-800" id="sim-time">60</span>
+                                    <span class="text-sm text-slate-500">min</span>
+                                </div>
+                            </div>
+                            <div id="sim-target-msg" class="text-xs font-bold text-red-500 mt-2 bg-red-50 px-2 py-1 rounded">Target Not Met (>10m)</div>
+                        </div>
+
+                        <!-- ROI Card -->
+                        <div class="card p-6 bg-slate-800 text-white border-none">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Annual Savings</h4>
+                            <div class="flex justify-between items-end">
+                                <div>
+                                    <span class="text-3xl font-bold" id="sim-savings">$0</span>
+                                    <p class="text-[10px] text-slate-400 mt-1">@ $450/hr Machine Rate</p>
+                                </div>
+                                <div class="text-right">
+                                    <span class="block text-2xl font-bold text-green-400" id="sim-capacity">+0</span>
+                                    <span class="text-[10px] text-green-400 uppercase">Hrs Capacity</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 4: CONTROL (Live Tool) -->
+            <div id="view-control" class="view-section hidden">
+                <div class="grid grid-cols-12 gap-6">
+                    
+                    <!-- Live Timer Tool -->
+                    <div class="col-span-12 lg:col-span-8 card p-0 overflow-hidden">
+                        <div class="bg-slate-800 p-4 flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-white flex items-center gap-2"><i class="ph ph-timer text-rose-500"></i> Changeover Assistant</h3>
+                                <p class="text-xs text-slate-400">Operator Mode: Line 4 Stamping</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-xs text-slate-400 block">Standard Time</span>
+                                <span class="text-xl font-mono font-bold text-green-400">10:00</span>
+                            </div>
+                        </div>
+                        
+                        <div class="p-8 flex flex-col items-center justify-center bg-slate-50 min-h-[300px]">
+                            <div id="stopwatch-display" class="text-8xl font-mono font-bold text-slate-800 mb-8 tabular-nums tracking-tighter">00:00</div>
+                            
+                            <div class="flex gap-4 w-full max-w-md">
+                                <button onclick="timerAction('start')" id="btn-start" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 rounded-lg font-bold text-lg shadow-lg shadow-green-200 transition-all flex items-center justify-center gap-2">
+                                    <i class="ph ph-play-circle text-2xl"></i> START
+                                </button>
+                                <button onclick="timerAction('stop')" id="btn-stop" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-4 rounded-lg font-bold text-lg shadow-lg shadow-rose-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    <i class="ph ph-stop-circle text-2xl"></i> FINISH
+                                </button>
+                            </div>
+
+                            <div class="mt-8 w-full max-w-md bg-white rounded border border-slate-200 p-4">
+                                <p class="text-xs font-bold text-slate-500 uppercase mb-2">Step Progress</p>
+                                <div class="space-y-3">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-4 h-4 rounded-full bg-green-500"></div>
+                                        <span class="text-sm text-slate-600 line-through">1. Pre-Stage Die (External)</span>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-4 h-4 rounded-full border-2 border-slate-300"></div>
+                                        <span class="text-sm font-bold text-slate-800">2. Lockout / Tagout</span>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-4 h-4 rounded-full border-2 border-slate-300"></div>
+                                        <span class="text-sm text-slate-500">3. Release Clamps</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Digital Andon -->
+                    <div class="col-span-12 lg:col-span-4 flex flex-col gap-4">
+                        <div class="card p-4 bg-slate-900 border-none text-center">
+                            <span class="text-xs text-slate-400 uppercase font-bold tracking-widest">Line Status</span>
+                            <div class="mt-2 text-4xl font-black text-green-500 animate-pulse">RUNNING</div>
+                            <span class="text-xs text-slate-500 mt-1">Since 08:30 AM</span>
+                        </div>
+                        
+                        <div class="card p-4">
+                            <h4 class="font-bold text-sm text-slate-700 mb-3 border-b pb-2">Recent Changeovers</h4>
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-center text-sm">
+                                    <span class="text-slate-600">Shift A - 09:15</span>
+                                    <span class="font-mono font-bold text-green-600">09:42</span>
+                                </div>
+                                <div class="flex justify-between items-center text-sm">
+                                    <span class="text-slate-600">Shift B - 02:30</span>
+                                    <span class="font-mono font-bold text-green-600">10:15</span>
+                                </div>
+                                <div class="flex justify-between items-center text-sm">
+                                    <span class="text-slate-600">Shift B - 05:45</span>
+                                    <span class="font-mono font-bold text-red-500">14:20</span> <!-- Red because > 10 -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card p-4 bg-blue-50 border-blue-100">
+                             <div class="flex items-start gap-3">
+                                 <i class="ph ph-info text-blue-600 text-xl"></i>
+                                 <div>
+                                     <h5 class="text-sm font-bold text-blue-800">Operator Note</h5>
+                                     <p class="text-xs text-blue-700 mt-1">Remember to clean the bolster plate <strong>before</strong> lowering the new die.</p>
+                                 </div>
+                             </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- VIEW 5: GEMBA & KAIZEN (Assignments -> Industry Tools) -->
+            <div id="view-gemba" class="view-section hidden">
+                <div class="grid grid-cols-12 gap-6 h-full">
+                    
+                    <!-- Digital Gemba Walk (Assignment: Field Visit) -->
+                    <div class="col-span-12 lg:col-span-7 card p-0 overflow-hidden flex flex-col">
+                        <div class="bg-slate-800 p-4 border-b border-slate-700">
+                            <h3 class="font-bold text-white flex items-center gap-2"><i class="ph ph-eye text-rose-500"></i> Digital Gemba Walk</h3>
+                            <p class="text-xs text-slate-400">"Go and See" Observation Tool (Field Work)</p>
+                        </div>
+                        <div class="p-6 flex-1 overflow-y-auto">
+                            <div class="flex gap-4 mb-6 text-sm">
+                                <div class="flex-1 bg-slate-50 p-3 rounded border border-slate-200">
+                                    <span class="block text-slate-500 text-[10px] uppercase font-bold">Observer</span>
+                                    <span class="font-bold text-slate-800">Manager B.</span>
+                                </div>
+                                <div class="flex-1 bg-slate-50 p-3 rounded border border-slate-200">
+                                    <span class="block text-slate-500 text-[10px] uppercase font-bold">Focus Area</span>
+                                    <span class="font-bold text-slate-800">Stamping Setup</span>
+                                </div>
+                                <div class="flex-1 bg-slate-50 p-3 rounded border border-slate-200">
+                                    <span class="block text-slate-500 text-[10px] uppercase font-bold">Date</span>
+                                    <span class="font-bold text-slate-800">Today</span>
+                                </div>
+                            </div>
+
+                            <h4 class="text-xs font-bold text-slate-500 uppercase mb-3">Waste Observation (TIMWOODS)</h4>
+                            <div class="space-y-3">
+                                <label class="flex items-center justify-between p-3 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer transition-colors">
+                                    <div class="flex items-center gap-3">
+                                        <input type="checkbox" class="w-4 h-4 text-rose-600 rounded">
+                                        <div>
+                                            <span class="block font-bold text-sm text-slate-800">Motion Waste</span>
+                                            <span class="text-xs text-slate-500">Operators walking to fetch clamps?</span>
+                                        </div>
+                                    </div>
+                                    <span class="bg-red-100 text-red-700 text-[10px] px-2 py-1 rounded font-bold">High Priority</span>
+                                </label>
+                                
+                                <label class="flex items-center justify-between p-3 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer transition-colors">
+                                    <div class="flex items-center gap-3">
+                                        <input type="checkbox" class="w-4 h-4 text-rose-600 rounded">
+                                        <div>
+                                            <span class="block font-bold text-sm text-slate-800">Waiting Waste</span>
+                                            <span class="text-xs text-slate-500">Machine idle while waiting for crane?</span>
+                                        </div>
+                                    </div>
+                                    <span class="bg-orange-100 text-orange-700 text-[10px] px-2 py-1 rounded font-bold">Med Priority</span>
+                                </label>
+
+                                <label class="flex items-center justify-between p-3 border border-slate-200 rounded hover:bg-slate-50 cursor-pointer transition-colors">
+                                    <div class="flex items-center gap-3">
+                                        <input type="checkbox" class="w-4 h-4 text-rose-600 rounded">
+                                        <div>
+                                            <span class="block font-bold text-sm text-slate-800">Defects / Rework</span>
+                                            <span class="text-xs text-slate-500">First piece trial run failed?</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            <button onclick="submitGemba()" class="mt-6 w-full bg-slate-800 text-white py-3 rounded text-sm font-bold hover:bg-slate-700 transition shadow-lg">Submit Observation Log</button>
+                        </div>
+                    </div>
+
+                    <!-- Kaizen Idea Board (Assignment: Reflective Paper) -->
+                    <div class="col-span-12 lg:col-span-5 flex flex-col gap-6">
+                        <div class="card p-0 overflow-hidden flex-1 flex flex-col max-h-[400px]">
+                            <div class="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center shrink-0">
+                                <div>
+                                    <h3 class="font-bold text-slate-800 flex items-center gap-2"><i class="ph ph-lightbulb text-yellow-500"></i> Kaizen Ideas</h3>
+                                    <p class="text-xs text-slate-500">Operator Reflections & Suggestions</p>
+                                </div>
+                                <button onclick="addKaizen()" class="text-xs bg-white border border-slate-300 px-3 py-1.5 rounded shadow-sm hover:bg-slate-50 font-bold transition-colors">+ Add New</button>
+                            </div>
+                            <div id="kaizen-container" class="p-4 bg-slate-50 overflow-y-auto space-y-3 flex-1">
+                                <!-- Sticky Note 1 -->
+                                <div class="bg-yellow-100 p-3 rounded shadow-sm border border-yellow-200 sticky-note cursor-pointer">
+                                    <p class="text-xs font-bold text-yellow-800 mb-1">Observation</p>
+                                    <p class="text-xs text-slate-700">"Red pen cap didn't fit yesterday. We need to check incoming material specs."</p>
+                                    <div class="mt-2 flex justify-between items-center">
+                                        <span class="text-[10px] text-slate-500">Submitted by: Operator 2</span>
+                                        <span class="text-[10px] bg-white px-1 rounded border border-yellow-200">New</span>
+                                    </div>
+                                </div>
+
+                                <!-- Sticky Note 2 -->
+                                <div class="bg-green-100 p-3 rounded shadow-sm border border-green-200 sticky-note cursor-pointer">
+                                    <p class="text-xs font-bold text-green-800 mb-1">Improvement Idea</p>
+                                    <p class="text-xs text-slate-700">"Mark the floor for the tool cart so we don't have to look for it."</p>
+                                    <div class="mt-2 flex justify-between items-center">
+                                        <span class="text-[10px] text-slate-500">Submitted by: Team Lead</span>
+                                        <span class="text-[10px] bg-white px-1 rounded border border-green-200">Approved</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Capability Matrix (Addressing "Capability" issue from transcripts) -->
+                        <div class="card p-4 shrink-0">
+                            <h4 class="text-xs font-bold text-slate-500 uppercase mb-3">Operator Skill Matrix</h4>
+                            <table class="w-full text-xs text-left">
+                                <thead class="text-slate-400 font-medium border-b border-slate-100">
+                                    <tr>
+                                        <th class="pb-2">Name</th>
+                                        <th class="pb-2 text-center">Stamping</th>
+                                        <th class="pb-2 text-center">Welding</th>
+                                        <th class="pb-2 text-center">SMED</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-slate-700">
+                                    <tr class="border-b border-slate-50">
+                                        <td class="py-2 font-bold">John D.</td>
+                                        <td class="py-2 text-center text-green-600">●●●●</td>
+                                        <td class="py-2 text-center text-green-600">●●●○</td>
+                                        <td class="py-2 text-center text-green-600">●●●●</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-2 font-bold">Sarah M.</td>
+                                        <td class="py-2 text-center text-green-600">●●○○</td>
+                                        <td class="py-2 text-center text-green-600">●●●●</td>
+                                        <td class="py-2 text-center text-slate-300">○○○○</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // --- Navigation Logic ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            document.getElementById('view-' + tabId).classList.remove('hidden');
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('btn-' + tabId).classList.add('active');
+
+            const titles = {
+                'define': { t: 'Define the Problem', s: 'Stamping Die Changeover Delays' },
+                'map': { t: 'Process Map', s: 'Value Stream Analysis' },
+                'countermeasures': { t: 'Improvement Simulator', s: 'Model SMED Impact' },
+                'control': { t: 'Shop Floor Control', s: 'Live Operator Assistant' },
+                'gemba': { t: 'Gemba & Continuous Improvement', s: 'Field Observations & Kaizen Log' }
+            };
+            document.getElementById('page-title').innerText = titles[tabId].t;
+            document.getElementById('page-subtitle').innerText = titles[tabId].s;
+
+            if (tabId === 'define') {
+                // Ensure charts re-render when tab is visible
+                setTimeout(renderCharts, 100);
+            }
+        }
+
+        // --- Chart Logic ---
+        function renderCharts() {
+            // 1. Loss Chart (Horizontal Bar for better readability)
+            const ctxLoss = document.getElementById('lossChart');
+            if(ctxLoss) {
+                if (Chart.getChart("lossChart")) {
+                    Chart.getChart("lossChart").destroy();
+                }
+                new Chart(ctxLoss, {
+                    type: 'bar',
+                    indexAxis: 'y', // Horizontal
+                    data: {
+                        labels: ['Setup (Changeover)', 'Breakdowns', 'Minor Stops', 'Speed Loss', 'Defects'],
+                        datasets: [{
+                            label: 'Hours Lost / Month',
+                            data: [44, 12, 8, 5, 2],
+                            backgroundColor: ['#e11d48', '#94a3b8', '#94a3b8', '#94a3b8', '#94a3b8'],
+                            borderRadius: 4,
+                            barThickness: 20
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { 
+                            x: { grid: { display: false } }, 
+                            y: { grid: { display: false } } 
+                        }
+                    }
+                });
+            }
+
+            // 2. Composition Chart (Quantifying Value vs Waste)
+            const ctxComp = document.getElementById('compositionChart');
+            if(ctxComp) {
+                if (Chart.getChart("compositionChart")) {
+                    Chart.getChart("compositionChart").destroy();
+                }
+                new Chart(ctxComp, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Total Time'],
+                        datasets: [
+                            {
+                                label: 'Value Added (Run)',
+                                data: [65],
+                                backgroundColor: '#22c55e',
+                                barThickness: 40
+                            },
+                            {
+                                label: 'Non-Value Added (Setup)',
+                                data: [35],
+                                backgroundColor: '#e11d48',
+                                barThickness: 40
+                            }
+                        ]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom' } },
+                        scales: { 
+                            x: { stacked: true, max: 100, grid: { display: false } }, 
+                            y: { stacked: true, grid: { display: false }, display: false } 
+                        }
+                    }
+                });
+            }
+        }
+
+        // --- VSM Interactive Logic ---
+        function toggleVSM(state) {
+            const btnC = document.getElementById('vsm-btn-current');
+            const btnF = document.getElementById('vsm-btn-future');
+            
+            // Stamping Data Elements
+            const co = document.getElementById('val-stamping-co');
+            const avail = document.getElementById('val-stamping-avail');
+            const inv = document.getElementById('val-inventory');
+            const ladder = document.getElementById('ladder-lead');
+
+            if (state === 'future') {
+                btnF.classList.add('bg-white', 'shadow', 'text-slate-800', 'font-bold');
+                btnF.classList.remove('text-slate-500', 'font-medium');
+                btnC.classList.remove('bg-white', 'shadow', 'text-slate-800', 'font-bold');
+                btnC.classList.add('text-slate-500', 'font-medium');
+
+                // Update VSM Values
+                co.innerHTML = '<span>C/O:</span> <b>< 10 min</b>';
+                co.className = 'flex justify-between text-green-600 font-bold bg-green-50 px-1 rounded';
+                avail.innerHTML = '<span>Avail:</span> <b>96%</b>';
+                inv.innerHTML = '600'; // Reduced inventory
+                inv.className = 'text-xs font-bold text-green-600 mt-1';
+                ladder.innerText = 'Lead Time: 0.5 Days';
+                ladder.className = 'flex-1 bg-green-50 p-2 text-center text-green-700 font-bold border-r border-slate-300 transition-all';
+            } else {
+                btnC.classList.add('bg-white', 'shadow', 'text-slate-800', 'font-bold');
+                btnC.classList.remove('text-slate-500', 'font-medium');
+                btnF.classList.remove('bg-white', 'shadow', 'text-slate-800', 'font-bold');
+                btnF.classList.add('text-slate-500', 'font-medium');
+
+                // Reset
+                co.innerHTML = '<span>C/O:</span> <b>60 min</b>';
+                co.className = 'flex justify-between text-red-600 font-bold bg-red-50 px-1 rounded';
+                avail.innerHTML = '<span>Avail:</span> <b>85%</b>';
+                inv.innerHTML = '4,600';
+                inv.className = 'text-xs font-bold text-red-600 mt-1';
+                ladder.innerText = 'Lead Time: 5 Days';
+                ladder.className = 'flex-1 bg-red-50 p-2 text-center text-red-700 font-bold border-r border-slate-300 transition-all';
+            }
+        }
+
+        // --- Simulator Logic ---
+        function updateSimulation() {
+            let currentTime = 60; // Baseline
+            const toggles = document.querySelectorAll('.impact-toggle:checked');
+            
+            toggles.forEach(t => {
+                currentTime -= parseInt(t.value);
+            });
+
+            // Update Time Display
+            const timeDisplay = document.getElementById('sim-time');
+            timeDisplay.innerText = currentTime;
+
+            // Update Circle Stroke (Gauge)
+            // Circumference 2 * pi * 80 = ~502
+            // 60 mins = full red circle (offset 0)
+            // 0 mins = empty circle (offset 502)
+            const circle = document.getElementById('sim-circle');
+            const percent = currentTime / 60; 
+            const offset = 502 * (1 - percent); // Invert because stroke draws backwards
+            // Logic correction: 60m should fill bar. 10m should be small.
+            // Actually, let's make full bar = 60m. 
+            // So offset should be 0 at 60m.
+            // At 10m, it is 1/6th filled? Or do we want to show reduction?
+            // Let's show "Remaining Time".
+            // 60m = full circle (502 offset 0). 30m = half circle (offset 251).
+            const dashOffset = 502 * (1 - (currentTime / 60));
+            circle.style.strokeDashoffset = dashOffset;
+
+            // Color Change
+            if (currentTime <= 10) {
+                circle.style.stroke = '#22c55e'; // Green
+                document.getElementById('sim-target-msg').innerText = "TARGET ACHIEVED";
+                document.getElementById('sim-target-msg').className = "text-xs font-bold text-green-600 mt-2 bg-green-50 px-2 py-1 rounded";
+            } else {
+                circle.style.stroke = '#ef4444'; // Red
+                document.getElementById('sim-target-msg').innerText = "Target Not Met (>10m)";
+                document.getElementById('sim-target-msg').className = "text-xs font-bold text-red-500 mt-2 bg-red-50 px-2 py-1 rounded";
+            }
+
+            // Financials
+            const timeSavedPerSetup = 60 - currentTime;
+            const setupsPerMonth = 44; // From Define tab
+            const hourlyRate = 450;
+            
+            const hoursSaved = (timeSavedPerSetup * setupsPerMonth) / 60;
+            const dollarsSaved = hoursSaved * hourlyRate;
+
+            document.getElementById('sim-capacity').innerText = "+" + hoursSaved.toFixed(1);
+            document.getElementById('sim-savings').innerText = "$" + dollarsSaved.toLocaleString(undefined, {maximumFractionDigits:0});
+        }
+
+        // --- Live Timer Logic ---
+        let timerInterval;
+        let seconds = 0;
+        let isRunning = false;
+
+        function timerAction(action) {
+            const display = document.getElementById('stopwatch-display');
+            const btnStart = document.getElementById('btn-start');
+            const btnStop = document.getElementById('btn-stop');
+
+            if (action === 'start') {
+                if(isRunning) return;
+                isRunning = true;
+                btnStart.disabled = true;
+                btnStop.disabled = false;
+                btnStop.classList.remove('opacity-50', 'cursor-not-allowed');
+                btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+                
+                // Add visual cue
+                display.parentElement.classList.add('recording');
+
+                timerInterval = setInterval(() => {
+                    seconds++;
+                    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+                    const s = (seconds % 60).toString().padStart(2, '0');
+                    display.innerText = `${m}:${s}`;
+                }, 1000);
+            } else {
+                clearInterval(timerInterval);
+                isRunning = false;
+                display.parentElement.classList.remove('recording');
+                btnStart.disabled = false;
+                btnStop.disabled = true;
+                btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+                btnStop.classList.add('opacity-50', 'cursor-not-allowed');
+                
+                // Mock Saving using new Toast
+                showToast(`Changeover Recorded: ${display.innerText}`);
+                seconds = 0;
+                display.innerText = "00:00";
+            }
+        }
+        
+        // --- GEMBA Logic ---
+        function submitGemba() {
+            const checkboxes = document.querySelectorAll('#view-gemba input[type="checkbox"]:checked');
+            if(checkboxes.length === 0) {
+                showToast("Please select at least one item!", "error");
+                return;
+            }
+            showToast(`${checkboxes.length} observations logged successfully!`, "success");
+            // Reset checkboxes
+            document.querySelectorAll('#view-gemba input[type="checkbox"]').forEach(cb => cb.checked = false);
+        }
+
+        // --- KAIZEN Logic ---
+        function addKaizen() {
+            const container = document.getElementById('kaizen-container');
+            
+            const ideas = [
+                "Install a shadow board for the 5mm wrench.",
+                "Rotate the raw material bin 90 degrees.",
+                "Label the hydraulic hoses with color codes.",
+                "Create a dedicated cart for clean-up supplies."
+            ];
+            const randomIdea = ideas[Math.floor(Math.random() * ideas.length)];
+            
+            const newNote = document.createElement('div');
+            newNote.className = 'bg-blue-50 p-3 rounded shadow-sm border border-blue-200 sticky-note cursor-pointer animate-fade-in';
+            newNote.innerHTML = `
+                <p class="text-xs font-bold text-blue-800 mb-1">New Suggestion</p>
+                <p class="text-xs text-slate-700">"${randomIdea}"</p>
+                <div class="mt-2 flex justify-between items-center">
+                    <span class="text-[10px] text-slate-500">Submitted by: You</span>
+                    <span class="text-[10px] bg-white px-1 rounded border border-blue-200 text-blue-600 font-bold">Just Now</span>
+                </div>
+            `;
+            container.prepend(newNote); // Add to top
+        }
+
+        // --- TOAST NOTIFICATION SYSTEM ---
+        function showToast(message, type = "success") {
+            const container = document.getElementById('toast-container');
+            
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            
+            // Set Color based on type
+            const borderColor = type === 'error' ? '#ef4444' : '#22c55e';
+            const icon = type === 'error' ? '<i class="ph ph-warning-circle text-red-500 text-xl"></i>' : '<i class="ph ph-check-circle text-green-500 text-xl"></i>';
+            
+            toast.style.borderLeftColor = borderColor;
+            
+            toast.innerHTML = `
+                ${icon}
+                <div>
+                    <p class="text-sm font-bold text-slate-800">System Notification</p>
+                    <p class="text-xs text-slate-500">${message}</p>
+                </div>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => toast.classList.add('show'), 10);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Init
+        window.onload = function() {
+            renderCharts();
+        };
+
+    </script>
+</body>
+</html>
